@@ -2,5 +2,6 @@ node_modules/
 dist/
 *.local
 .env
+.omo/
 # Config file contains secrets — NEVER commit
 # ~/.llm-usage/config.json
