@@ -1,0 +1,13 @@
+Task T6 evidence
+
+Files added:
+- src/providers/zen.ts
+- src/providers/openrouter.ts
+- src/providers/stubs.test.ts
+
+Verification:
+- npm test ✅
+- npm run typecheck ✅
+
+Notes:
+- Phase-2 stubs only; no active aggregator registration.

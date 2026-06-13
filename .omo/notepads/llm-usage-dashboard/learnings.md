@@ -16,3 +16,11 @@
 - src/core/paths.ts: configPath, claudeCredentialsPath, codexAuthPath — all os.homedir()-based, env-overridable
 - Secret patterns covered: sk-ant-*, sk-*, Fe26.2**, Bearer
 - Sensitive keys: authorization, cookie, token, access_token, apikey, api_key, key, password, credentials
+## [2026-06-13] Task T4 complete
+- src/core/config.ts: loadConfig (defaults+merge), validateConfig (secret-free errors), saveConfig (atomic write, chmod 0600), writeExampleConfig
+- Defaults: refreshIntervalSec=180, port=7878, MIN_REFRESH_SEC=30
+- saveConfig uses rename for atomicity; creates dir if missing
+## [2026-06-13] Task T6 complete
+- zen.ts + openrouter.ts: not_implemented stubs implementing IProviderAdapter
+- NOT in active aggregator list — Phase-2 seams only
+- Phase-2 future: OpenRouter GET /api/v1/key; Zen HTML scrape or cost accumulation
