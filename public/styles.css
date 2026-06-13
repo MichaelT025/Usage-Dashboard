@@ -226,19 +226,6 @@ button:disabled {
   display: none !important;
 }
 
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 50;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
 @media (max-width: 640px) {
   .providers-grid {
     grid-template-columns: 1fr;
@@ -255,3 +242,39 @@ button:disabled {
     margin-bottom: 0.5rem;
   }
 }
+
+/* ── Settings Modal ─────────────────────────────────────── */
+.modal{position:fixed;inset:0;z-index:100}
+.modal.hidden{display:none}
+.modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+.modal-content{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:#1e293b;border-radius:.75rem;width:min(480px,90vw);
+  max-height:85vh;overflow-y:auto;box-shadow:0 25px 50px rgba(0,0,0,.5)}
+.modal-header{display:flex;justify-content:space-between;align-items:center;
+  padding:1.25rem;border-bottom:1px solid #334155}
+.modal-header h2{margin:0;font-size:1.05rem}
+.modal-close{background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1.2rem;line-height:1}
+.modal-body{padding:1.25rem}
+.modal-footer{display:flex;gap:.75rem;justify-content:flex-end;
+  padding-top:1rem;border-top:1px solid #334155;margin-top:1rem}
+.settings-section{margin-bottom:1.25rem}
+.settings-section h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;
+  color:#64748b;margin:0 0 .6rem}
+.settings-label{display:flex;flex-direction:column;gap:.35rem;
+  margin-bottom:.65rem;font-size:.88rem;color:#94a3b8}
+.settings-label input{background:#0f172a;border:1px solid #334155;border-radius:.4rem;
+  padding:.45rem .7rem;color:#f1f5f9;font-size:.88rem;outline:none}
+.settings-label input:focus{border-color:#4f46e5}
+.settings-hint{font-size:.78rem;color:#64748b;margin:0 0 .45rem}
+.status-row{display:flex;justify-content:space-between;padding:.2rem 0;font-size:.88rem}
+.status-ok{color:#22c55e}
+.status-warn{color:#f59e0b}
+.s-feedback{margin-top:.65rem;padding:.4rem .7rem;border-radius:.35rem;font-size:.83rem}
+.s-feedback.success{background:#14532d;color:#86efac}
+.s-feedback.error{background:#7f1d1d;color:#fca5a5}
+.s-feedback.hidden{display:none}
+.btn-cancel{background:#334155;border:none;color:#94a3b8;padding:.45rem .9rem;
+  border-radius:.4rem;cursor:pointer}
+.btn-save{background:#4f46e5;border:none;color:#fff;padding:.45rem .9rem;
+  border-radius:.4rem;cursor:pointer;font-weight:600}
+.btn-save:disabled{opacity:.5;cursor:default}

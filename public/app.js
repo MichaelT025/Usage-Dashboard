@@ -146,10 +146,129 @@ function escHtml(s) {
 // --- Wiring ---
 
 document.getElementById('refresh-btn')?.addEventListener('click', () => refresh(true));
-// Settings btn placeholder — T15 will wire this
-document.getElementById('settings-btn')?.addEventListener('click', () => {
-  document.getElementById('settings-modal')?.classList.toggle('hidden');
-});
 
 // Initial load
 refresh();
+
+// ─── Settings Modal ───────────────────────────────────────────────
+
+(function initSettings() {
+  const modal  = document.getElementById('settings-modal');
+  const gearBtn = document.getElementById('settings-btn');
+  if (!modal || !gearBtn) return;
+
+  let loaded = false;
+
+  gearBtn.addEventListener('click', async () => {
+    modal.classList.toggle('hidden');
+    if (!modal.classList.contains('hidden') && !loaded) {
+      loaded = true;
+      await loadConfigStatus();
+    }
+  });
+
+  async function loadConfigStatus() {
+    try {
+      const data = await fetch('/api/config').then(r => r.json());
+      renderModal(data);
+    } catch {
+      modal.innerHTML = '<div class="modal-content"><p style="padding:1rem;color:#f87171">Failed to load config</p></div>';
+    }
+  }
+
+  function renderModal(s) {
+    modal.innerHTML = `
+      <div class="modal-backdrop" id="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button class="modal-close" id="modal-close" type="button">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-section">
+            <h3>Provider Status</h3>
+            <div class="status-row"><span>Claude</span>
+              <span class="${s.claudeTokenFound?'status-ok':'status-warn'}">${s.claudeTokenFound?'✓ configured':'✗ run `claude` to login'}</span></div>
+            <div class="status-row"><span>Codex</span>
+              <span class="${s.codexTokenFound?'status-ok':'status-warn'}">${s.codexTokenFound?'✓ configured':'✗ run `codex login`'}</span></div>
+            <div class="status-row"><span>OpenCode Go workspace</span>
+              <span class="${s.opencodeWorkspaceIdSet?'status-ok':'status-warn'}">${s.opencodeWorkspaceIdSet?'✓ set':'✗ not set'}</span></div>
+            <div class="status-row"><span>OpenCode Go cookie</span>
+              <span class="${s.opencodeAuthCookieSet?'status-ok':'status-warn'}">${s.opencodeAuthCookieSet?'✓ set':'✗ not set'}</span></div>
+          </div>
+          <div class="settings-section">
+            <h3>OpenCode Go</h3>
+            <p class="settings-hint">Workspace ID is in the opencode.ai URL: /workspace/<strong>wrk_…</strong>/go</p>
+            <label class="settings-label">Workspace ID
+              <input type="text" id="s-wsid" placeholder="wrk_YOUR_ID_HERE" autocomplete="off"/>
+            </label>
+            <p class="settings-hint">Copy the <code>auth</code> cookie from browser DevTools after logging into opencode.ai</p>
+            <label class="settings-label">Auth Cookie
+              <input type="password" id="s-cookie" placeholder="Fe26.2**… (paste here)" autocomplete="new-password"/>
+            </label>
+          </div>
+          <div class="settings-section">
+            <h3>Refresh Interval</h3>
+            <label class="settings-label">Seconds (min 30)
+              <input type="number" id="s-interval" value="${escHtml(String(s.refreshIntervalSec))}" min="30" max="3600"/>
+            </label>
+          </div>
+          <div id="s-feedback" class="s-feedback hidden"></div>
+          <div class="modal-footer">
+            <button class="btn-cancel" id="s-cancel" type="button">Cancel</button>
+            <button class="btn-save"   id="s-save"   type="button">Save</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('modal-backdrop').addEventListener('click', close);
+    document.getElementById('modal-close').addEventListener('click', close);
+    document.getElementById('s-cancel').addEventListener('click', close);
+    document.getElementById('s-save').addEventListener('click', doSave);
+  }
+
+  function close() {
+    modal.classList.add('hidden');
+    loaded = false;
+  }
+
+  async function doSave() {
+    const wsid     = document.getElementById('s-wsid')?.value?.trim();
+    const cookie   = document.getElementById('s-cookie')?.value?.trim();
+    const interval = parseInt(document.getElementById('s-interval')?.value ?? '180', 10);
+    const payload  = {};
+    if (wsid)   payload.opencodeWorkspaceId  = wsid;
+    if (cookie) payload.opencodeAuthCookie   = cookie;
+    if (interval >= 30) payload.refreshIntervalSec = interval;
+
+    const fb   = document.getElementById('s-feedback');
+    const save = document.getElementById('s-save');
+    if (save) save.disabled = true;
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: 'Save failed' }));
+        showFeedback(fb, '✗ ' + (d.error ?? 'Save failed'), 'error');
+      } else {
+        showFeedback(fb, '✓ Saved', 'success');
+        const cookieEl = document.getElementById('s-cookie');
+        if (cookieEl) cookieEl.value = '';   // never echo stored value
+        setTimeout(() => refresh(true), 600);
+      }
+    } catch {
+      showFeedback(fb, '✗ Network error', 'error');
+    } finally {
+      if (save) save.disabled = false;
+    }
+  }
+
+  function showFeedback(el, msg, type) {
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 's-feedback ' + type;
+  }
+}());
