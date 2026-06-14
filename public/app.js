@@ -1,4 +1,4 @@
-const REFRESH_INTERVAL_MS = 180_000; // 3 minutes default; overridable
+let refreshIntervalMs = 180_000; // default; synced from /api/config on load
 
 let refreshTimer = null;
 let isRefreshing = false;
@@ -30,7 +30,7 @@ async function refresh(manual = false) {
     const data = manual ? await triggerBackendRefresh() : await fetchStatus();
     renderProviders(data.providers);
     updateLastUpdated(data.generatedAt);
-    scheduleAutoRefresh(REFRESH_INTERVAL_MS);
+    scheduleAutoRefresh(refreshIntervalMs);
   } catch (err) {
     // Show error state but don't clear existing cards
     console.error('Refresh failed:', err.message);
@@ -242,6 +242,14 @@ function escHtml(s) {
 
 document.getElementById('refresh-btn')?.addEventListener('click', () => refresh(true));
 
+// Sync refresh interval from server config on load
+(async function initRefreshInterval() {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    if (cfg.refreshIntervalSec) refreshIntervalMs = cfg.refreshIntervalSec * 1000;
+  } catch { /* keep default */ }
+})();
+
 // Initial load
 refresh();
 
@@ -378,6 +386,7 @@ function initDrawer() {
         showFeedback(fb, '✗ ' + (d.error ?? 'Save failed'), 'error');
       } else {
         showFeedback(fb, '✓ Saved', 'success');
+        if (interval >= 30) refreshIntervalMs = interval * 1000;
         const cookieEl = document.getElementById('s-cookie');
         if (cookieEl) cookieEl.value = ''; // never echo stored value
         setTimeout(() => refresh(true), 600);
