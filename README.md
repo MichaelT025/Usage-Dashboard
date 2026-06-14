@@ -1,6 +1,6 @@
 # llm-usage
 
-> Local web dashboard showing LLM subscription usage for Claude, Codex, and OpenCode Go — all in one place.
+> Local LLM subscription usage monitor — terminal by default, with an optional web dashboard.
 
 ![license](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
@@ -9,7 +9,7 @@
 
 ## Overview
 
-`llm-usage` polls usage APIs and scrapes provider pages to give you a single-pane view of your LLM subscription limits. It runs a lightweight HTTP server on `127.0.0.1` — nothing leaves your machine, and credentials are never logged or transmitted off-device.
+`llm-usage` polls usage APIs and scrapes provider pages to give you a single-pane view of your LLM subscription limits. By default it prints a snapshot to your terminal and exits. Nothing leaves your machine, and credentials are never logged or transmitted off-device.
 
 **Supported providers:**
 
@@ -32,11 +32,16 @@ npm install -g llm-usage
 # Run the interactive setup wizard
 llm-usage setup
 
-# Start the dashboard
+# Print a usage snapshot to the terminal
 llm-usage
-```
 
-Open `http://localhost:7878` in your browser (it opens automatically unless you pass `--no-open`).
+# Live auto-refreshing terminal UI
+llm-usage --watch
+
+# Launch the web dashboard (old default)
+llm-usage --dash
+# Open http://localhost:7878 in your browser
+```
 
 ### One-shot usage (no global install)
 
@@ -47,13 +52,25 @@ npx llm-usage
 
 ---
 
+### Note for existing users
+
+Previously, `llm-usage` launched the web dashboard by default. As of this version, the default output is a terminal snapshot that prints and exits immediately.
+
+To restore the web dashboard behavior:
+
+```bash
+llm-usage --dash
+```
+
+---
+
 ## Setup details
 
 ### Claude
 
 Claude credentials are read automatically from `~/.claude/.credentials.json` (created by the Claude Code CLI when you run `claude`). No manual configuration needed.
 
-If the dashboard shows "not configured," log into Claude Code once:
+If the terminal output shows "not configured," log into Claude Code once:
 
 ```bash
 claude
@@ -83,17 +100,26 @@ The wizard masks input so the cookie value is never echoed to the terminal.
 ## Command-line reference
 
 ```
-llm-usage [options]           Start the dashboard
-llm-usage setup               Interactive setup wizard
-llm-usage setup --check       Check provider configuration status
-llm-usage setup --no-validate Skip live credential validation
-llm-usage --help              Show usage
+llm-usage                 Print a usage snapshot to the terminal and exit (default)
+llm-usage --watch         Live auto-refreshing terminal UI (alias: --tui)
+llm-usage --json          Print a machine-readable JSON snapshot and exit
+llm-usage --dash          Launch the local web dashboard
+llm-usage setup           Interactive setup wizard
+llm-usage setup --check   Check provider configuration status
+llm-usage setup --no-validate  Skip live credential validation
+llm-usage --help          Show usage
 ```
 
-| Option     | Description                           |
-| ---------- | ------------------------------------- |
-| `--port N` | Server port (default: `7878`)         |
-| `--no-open` | Don't open the browser automatically |
+`--watch`/`--tui`, `--json`, and `--dash` are mutually exclusive. Combining them exits with an error.
+
+| Option       | Description                                                                 |
+| ------------ | --------------------------------------------------------------------------- |
+| `--port N`   | Server port (default: `7878`) — only applies with `--dash`                  |
+| `--no-open`  | Don't open the browser automatically — only applies with `--dash`           |
+| `--watch`, `--tui` | Live TUI — requires an interactive terminal (TTY)                    |
+| `--json`     | Machine-readable JSON output — color disabled, always exits 0               |
+
+Color is auto-disabled when output is piped or the `NO_COLOR` environment variable is set.
 
 ---
 
@@ -116,6 +142,8 @@ Config lives at `~/.llm-usage/config.json`. Fields:
 
 ## API endpoints
 
+> API endpoints are only available when running `llm-usage --dash`.
+
 All endpoints are local-only (`http://127.0.0.1:7878`).
 
 | Method | Path           | Description                                    |
@@ -134,9 +162,11 @@ The `POST /api/config` endpoint is guarded against cross-origin requests and rej
 
 ```
 src/
-├── cli.ts              CLI entrypoint — flag parsing, setup delegation, server bootstrap
+├── cli.ts              CLI entrypoint — flag parsing, terminal/JSON/TUI/web dispatch
 ├── server.ts           HTTP server — routing, static file serving, config CRUD
 ├── setup.ts            Interactive setup wizard with masked credential input
+├── render.ts           Pure ANSI terminal formatter functions (bar, colors, frame builder)
+├── tui.ts              Live alt-screen TUI loop (Poller-driven, 1s countdown re-render, key/resize/signal handling)
 ├── core/
 │   ├── types.ts        Pure data contracts (UsageData, QuotaWindow, StatusResponse)
 │   ├── config.ts       Load / validate / save config (~/.llm-usage/config.json)
