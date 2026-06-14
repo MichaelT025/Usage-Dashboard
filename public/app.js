@@ -129,12 +129,16 @@ function updateCountdowns() {
 
 function formatDuration(ms) {
   const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${sec}s`;
-  return `${sec}s`;
+  const totalMin = Math.floor(s / 60);
+  const totalH = Math.floor(s / 3600);
+  const totalD = Math.floor(s / 86400);
+  const remH = totalH % 24;
+  const remM = totalMin % 60;
+  const remS = s % 60;
+  if (totalD >= 1) return `${totalD}d ${remH}h`;
+  if (totalH >= 1) return `${totalH}h ${remM}m`;
+  if (totalMin >= 1) return `${totalMin}m ${remS}s`;
+  return `${remS}s`;
 }
 
 // Tick countdowns every second
