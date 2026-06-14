@@ -3,6 +3,9 @@ const REFRESH_INTERVAL_MS = 180_000; // 3 minutes default; overridable
 let refreshTimer = null;
 let isRefreshing = false;
 
+let activeFilter = 'all';      // persists across re-renders
+let latestProviders = [];      // last fetched providers array (for re-filter on pill click)
+
 // --- Fetch & render ---
 
 async function fetchStatus() {
@@ -42,48 +45,103 @@ function scheduleAutoRefresh(ms) {
   refreshTimer = setTimeout(() => refresh(), ms);
 }
 
+// --- Filtering ---
+
+function applyFilter(providers) {
+  // Always exclude not_implemented from everything
+  const active = providers.filter(p => p.state !== 'not_implemented');
+  if (activeFilter === 'connected') return active.filter(p => p.state === 'ok');
+  if (activeFilter === 'attention') return active.filter(p => p.state !== 'ok');
+  return active; // 'all'
+}
+
+function computeCounts(providers) {
+  const active = providers.filter(p => p.state !== 'not_implemented');
+  return {
+    all: active.length,
+    connected: active.filter(p => p.state === 'ok').length,
+    attention: active.filter(p => p.state !== 'ok').length,
+  };
+}
+
 // --- Provider card rendering ---
 
 function renderProviders(providers) {
+  latestProviders = providers;
   const grid = document.getElementById('providers-grid');
+  const emptyEl = document.querySelector('.grid-empty');
   if (!grid) return;
-  // Filter out not_implemented providers
-  const active = providers.filter(p => p.state !== 'not_implemented');
-  grid.innerHTML = active.map(renderCard).join('');
-  // Start live countdowns
+
+  // Update pill counts
+  const counts = computeCounts(providers);
+  document.querySelectorAll('.filter-pill').forEach(btn => {
+    const f = btn.dataset.filter;
+    const countEl = btn.querySelector('.pill-count');
+    if (countEl) countEl.textContent = counts[f] ?? '';
+  });
+
+  const shown = applyFilter(providers);
+
+  if (shown.length === 0) {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    if (emptyEl) emptyEl.classList.remove('hidden');
+  } else {
+    if (emptyEl) emptyEl.classList.add('hidden');
+    grid.style.display = '';
+    grid.innerHTML = shown.map(renderCard).join('');
+    // Programmatic icon fallback (no inline onerror — module scope not visible in HTML strings)
+    grid.querySelectorAll('img.provider-icon').forEach(img => {
+      img.onerror = () => img.replaceWith(monogramTile(img.dataset.monogram || '?'));
+    });
+  }
+
   startCountdowns();
 }
 
+function monogramTile(letter) {
+  const el = document.createElement('span');
+  el.className = 'provider-icon is-monogram';
+  el.textContent = String(letter).charAt(0).toUpperCase();
+  return el;
+}
+
 function renderCard(provider) {
+  const monogram = escHtml(provider.displayName.trim().charAt(0).toUpperCase());
+  const iconImg = `<img class="provider-icon" src="icons/${escHtml(provider.providerId)}.svg" alt="" data-monogram="${monogram}">`;
+
   if (provider.state === 'ok') {
     return `
-      <article class="provider-card state-ok" data-provider="${provider.providerId}">
-        <header class="card-header">
+      <article class="provider-card state-ok" data-provider="${escHtml(provider.providerId)}">
+        <div class="card-header">
+          ${iconImg}
           <h2 class="card-title">${escHtml(provider.displayName)}</h2>
           ${provider.plan ? `<span class="card-plan">${escHtml(provider.plan)}</span>` : ''}
           <span class="status-dot dot-ok" title="OK"></span>
-        </header>
-        <div class="windows">
-          ${provider.windows.map(renderWindow).join('')}
         </div>
-        ${provider.credits ? renderCredits(provider.credits) : ''}
+        <div class="card-body">
+          ${provider.windows.map(renderWindow).join('')}
+          ${provider.credits ? renderCredits(provider.credits) : ''}
+        </div>
       </article>`;
   }
-  // unavailable, unconfigured, or error state
   const stateLabel = { unavailable: 'Unavailable', unconfigured: 'Not Configured' }[provider.state] ?? provider.state;
   const hint = provider.error?.hint ?? '';
   const code = provider.error?.code ?? '';
   const dotClass = provider.state === 'unavailable' ? 'dot-error' : 'dot-warn';
   return `
-    <article class="provider-card state-${provider.state}" data-provider="${provider.providerId}">
-      <header class="card-header">
+    <article class="provider-card state-${escHtml(provider.state)}" data-provider="${escHtml(provider.providerId)}">
+      <div class="card-header">
+        ${iconImg}
         <h2 class="card-title">${escHtml(provider.displayName)}</h2>
-        <span class="status-dot ${dotClass}" title="${stateLabel}"></span>
-      </header>
-      <div class="error-body">
-        <p class="error-label">${escHtml(stateLabel)}</p>
-        ${code ? `<code class="error-code">${escHtml(code)}</code>` : ''}
-        ${hint ? `<p class="error-hint">${escHtml(hint)}</p>` : ''}
+        <span class="status-dot ${dotClass}" title="${escHtml(stateLabel)}"></span>
+      </div>
+      <div class="card-body">
+        <div class="error-body">
+          <p class="error-label">${escHtml(stateLabel)}</p>
+          ${code ? `<code class="error-code">${escHtml(code)}</code>` : ''}
+          ${hint ? `<p class="error-hint">${escHtml(hint)}</p>` : ''}
+        </div>
       </div>
     </article>`;
 }
@@ -91,22 +149,31 @@ function renderCard(provider) {
 function renderWindow(win) {
   const pct = Math.min(100, Math.max(0, win.usedPercent));
   const colorClass = pct >= 100 ? 'bar-critical' : pct >= 80 ? 'bar-warning' : 'bar-ok';
+  const barOpacity = (0.4 + (pct / 100) * 0.6).toFixed(2);
   return `
     <div class="window-row">
       <div class="window-meta">
         <span class="window-label">${escHtml(win.label)}</span>
-        <span class="window-pct">${pct}%</span>
-        <span class="window-countdown" data-resets-at="${win.resetsAt}">…</span>
       </div>
-      <div class="progress-bar-track">
-        <div class="progress-bar ${colorClass}" style="width:${pct}%"></div>
+      <div class="window-bar-row">
+        <div class="progress-bar-track">
+          <div class="progress-bar ${colorClass}"
+               style="width:${pct}%;--bar-opacity:${barOpacity}"
+               role="progressbar"
+               aria-valuenow="${pct}"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               aria-label="${escHtml(win.label)}"></div>
+        </div>
+        <span class="window-pct">${pct}% used</span>
       </div>
+      <span class="window-countdown" data-resets-at="${escHtml(win.resetsAt)}">…</span>
     </div>`;
 }
 
 function renderCredits(credits) {
   const parts = [];
-  if (credits.balanceUsd != null) parts.push(`Balance: $${credits.balanceUsd.toFixed(2)}`);
+  if (credits.balanceUsd != null) parts.push(`$${credits.balanceUsd.toFixed(2)}`);
   if (credits.valueUsd != null) parts.push(`Used: $${credits.valueUsd.toFixed(2)}`);
   return parts.length ? `<p class="credits-row">${escHtml(credits.label)}: ${parts.join(' · ')}</p>` : '';
 }
@@ -178,98 +245,126 @@ document.getElementById('refresh-btn')?.addEventListener('click', () => refresh(
 // Initial load
 refresh();
 
-// ─── Settings Modal ───────────────────────────────────────────────
+// Filter pill wiring
+document.querySelectorAll('.filter-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (isRefreshing) return; // don't interfere during refresh
+    activeFilter = btn.dataset.filter;
+    // Update active state + aria
+    document.querySelectorAll('.filter-pill').forEach(b => {
+      b.classList.toggle('is-active', b === btn);
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+    // Re-render from cached data (no network call)
+    renderProviders(latestProviders);
+  });
+});
 
-(function initSettings() {
-  const modal  = document.getElementById('settings-modal');
+// ─── Settings Drawer ──────────────────────────────────────────────
+
+function initDrawer() {
+  const drawer = document.getElementById('settings-drawer');
   const gearBtn = document.getElementById('settings-btn');
-  if (!modal || !gearBtn) return;
+  if (!drawer || !gearBtn) return;
 
   let loaded = false;
 
-  gearBtn.addEventListener('click', async () => {
-    modal.classList.toggle('hidden');
-    if (!modal.classList.contains('hidden') && !loaded) {
+  function openDrawer() {
+    drawer.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    if (!loaded) {
       loaded = true;
-      await loadConfigStatus();
+      loadConfigStatus();
+    }
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('is-open');
+    document.body.style.overflow = '';
+    loaded = false; // reset so config reloads on next open (preserves original behavior)
+    gearBtn.focus();
+  }
+
+  gearBtn.addEventListener('click', openDrawer);
+
+  drawer.querySelector('.drawer-backdrop')?.addEventListener('click', closeDrawer);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && drawer.classList.contains('is-open')) {
+      closeDrawer();
     }
   });
 
   async function loadConfigStatus() {
+    const panel = drawer.querySelector('.drawer-panel');
+    if (!panel) return;
     try {
       const data = await fetch('/api/config').then(r => r.json());
-      renderModal(data);
+      renderDrawer(panel, data);
     } catch {
-      modal.innerHTML = '<div class="modal-content"><p style="padding:1rem;color:#f87171">Failed to load config</p></div>';
+      panel.innerHTML = '<p style="padding:1rem;color:var(--crit)">Failed to load config</p>';
     }
   }
 
-  function renderModal(s) {
-    modal.innerHTML = `
-      <div class="modal-backdrop" id="modal-backdrop"></div>
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Settings</h2>
-          <button class="modal-close" id="modal-close" type="button">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="settings-section">
-            <h3>Provider Status</h3>
-            <div class="status-row"><span>Claude</span>
-              <span class="${s.claudeTokenFound?'status-ok':'status-warn'}">${s.claudeTokenFound?'✓ configured':'✗ run `claude` to login'}</span></div>
-            <div class="status-row"><span>Codex</span>
-              <span class="${s.codexTokenFound?'status-ok':'status-warn'}">${s.codexTokenFound?'✓ configured':'✗ run `codex login`'}</span></div>
-            <div class="status-row"><span>OpenCode Go workspace</span>
-              <span class="${s.opencodeWorkspaceIdSet?'status-ok':'status-warn'}">${s.opencodeWorkspaceIdSet?'✓ set':'✗ not set'}</span></div>
-            <div class="status-row"><span>OpenCode Go cookie</span>
-              <span class="${s.opencodeAuthCookieSet?'status-ok':'status-warn'}">${s.opencodeAuthCookieSet?'✓ set':'✗ not set'}</span></div>
-          </div>
-          <div class="settings-section">
-            <h3>OpenCode Go</h3>
-            <p class="settings-hint">Workspace ID is in the opencode.ai URL: /workspace/<strong>wrk_…</strong>/go</p>
-            <label class="settings-label">Workspace ID
-              <input type="text" id="s-wsid" placeholder="wrk_YOUR_ID_HERE" autocomplete="off"/>
-            </label>
-            <p class="settings-hint">Copy the <code>auth</code> cookie from browser DevTools after logging into opencode.ai</p>
-            <label class="settings-label">Auth Cookie
-              <input type="password" id="s-cookie" placeholder="Fe26.2**… (paste here)" autocomplete="new-password"/>
-            </label>
-          </div>
-          <div class="settings-section">
-            <h3>Refresh Interval</h3>
-            <label class="settings-label">Seconds (min 30)
-              <input type="number" id="s-interval" value="${escHtml(String(s.refreshIntervalSec))}" min="30" max="3600"/>
-            </label>
-          </div>
-          <div id="s-feedback" class="s-feedback hidden"></div>
-          <div class="modal-footer">
-            <button class="btn-cancel" id="s-cancel" type="button">Cancel</button>
-            <button class="btn-save"   id="s-save"   type="button">Save</button>
-          </div>
-        </div>
+  function renderDrawer(panel, s) {
+    panel.innerHTML = `
+      <div class="drawer-header">
+        <h2 class="drawer-title">Settings</h2>
+        <button id="drawer-close" type="button" title="Close">&#x2715;</button>
+      </div>
+      <div class="settings-section">
+        <h3>Provider Status</h3>
+        <div class="status-row"><span>Claude</span>
+          <span class="${s.claudeTokenFound ? 'status-ok' : 'status-warn'}">${s.claudeTokenFound ? '✓ configured' : '✗ run `claude`'}</span></div>
+        <div class="status-row"><span>Codex</span>
+          <span class="${s.codexTokenFound ? 'status-ok' : 'status-warn'}">${s.codexTokenFound ? '✓ configured' : '✗ run `codex login`'}</span></div>
+        <div class="status-row"><span>OpenCode Go workspace</span>
+          <span class="${s.opencodeWorkspaceIdSet ? 'status-ok' : 'status-warn'}">${s.opencodeWorkspaceIdSet ? '✓ set' : '✗ not set'}</span></div>
+        <div class="status-row"><span>OpenCode Go cookie</span>
+          <span class="${s.opencodeAuthCookieSet ? 'status-ok' : 'status-warn'}">${s.opencodeAuthCookieSet ? '✓ set' : '✗ not set'}</span></div>
+      </div>
+      <div class="settings-section">
+        <h3>OpenCode Go</h3>
+        <p class="settings-hint">Workspace ID is in the opencode.ai URL: /workspace/<strong>wrk_…</strong>/go</p>
+        <label class="settings-label">Workspace ID
+          <input type="text" id="s-wsid" placeholder="wrk_YOUR_ID_HERE" autocomplete="off"/>
+        </label>
+        <p class="settings-hint">Copy the <code>auth</code> cookie from browser DevTools</p>
+        <label class="settings-label">Auth Cookie
+          <input type="password" id="s-cookie" placeholder="Fe26.2**… (paste here)" autocomplete="new-password"/>
+        </label>
+      </div>
+      <div class="settings-section">
+        <h3>Refresh Interval</h3>
+        <label class="settings-label">Seconds (min 30)
+          <input type="number" id="s-interval" value="${escHtml(String(s.refreshIntervalSec))}" min="30" max="3600"/>
+        </label>
+      </div>
+      <div id="s-feedback" class="s-feedback hidden"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="s-cancel" type="button">Cancel</button>
+        <button class="btn-save" id="s-save" type="button">Save</button>
       </div>`;
 
-    document.getElementById('modal-backdrop').addEventListener('click', close);
-    document.getElementById('modal-close').addEventListener('click', close);
-    document.getElementById('s-cancel').addEventListener('click', close);
-    document.getElementById('s-save').addEventListener('click', doSave);
-  }
+    // Wire close button (rendered dynamically)
+    document.getElementById('drawer-close')?.addEventListener('click', closeDrawer);
+    document.getElementById('s-cancel')?.addEventListener('click', closeDrawer);
+    document.getElementById('s-save')?.addEventListener('click', doSave);
 
-  function close() {
-    modal.classList.add('hidden');
-    loaded = false;
+    const closeBtn = document.getElementById('drawer-close');
+    if (closeBtn) closeBtn.focus();
   }
 
   async function doSave() {
-    const wsid     = document.getElementById('s-wsid')?.value?.trim();
-    const cookie   = document.getElementById('s-cookie')?.value?.trim();
+    const wsid = document.getElementById('s-wsid')?.value?.trim();
+    const cookie = document.getElementById('s-cookie')?.value?.trim();
     const interval = parseInt(document.getElementById('s-interval')?.value ?? '180', 10);
-    const payload  = {};
-    if (wsid)   payload.opencodeWorkspaceId  = wsid;
-    if (cookie) payload.opencodeAuthCookie   = cookie;
+    const payload = {};
+    if (wsid) payload.opencodeWorkspaceId = wsid;
+    if (cookie) payload.opencodeAuthCookie = cookie;
     if (interval >= 30) payload.refreshIntervalSec = interval;
 
-    const fb   = document.getElementById('s-feedback');
+    const fb = document.getElementById('s-feedback');
     const save = document.getElementById('s-save');
     if (save) save.disabled = true;
     try {
@@ -284,7 +379,7 @@ refresh();
       } else {
         showFeedback(fb, '✓ Saved', 'success');
         const cookieEl = document.getElementById('s-cookie');
-        if (cookieEl) cookieEl.value = '';   // never echo stored value
+        if (cookieEl) cookieEl.value = ''; // never echo stored value
         setTimeout(() => refresh(true), 600);
       }
     } catch {
@@ -299,4 +394,7 @@ refresh();
     el.textContent = msg;
     el.className = 's-feedback ' + type;
   }
-}());
+}
+
+// Call at bottom of module
+initDrawer();

@@ -18,8 +18,11 @@ const MIME: Record<string, string> = {
   '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
+  '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.json': 'application/json',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
 };
 
 function jsonResponse(res: http.ServerResponse, data: unknown, status = 200): void {
