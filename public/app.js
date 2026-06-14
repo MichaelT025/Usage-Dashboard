@@ -51,9 +51,7 @@ function applyFilter(providers) {
   // Always exclude not_implemented from everything
   const active = providers.filter(p => p.state !== 'not_implemented');
   if (activeFilter === 'connected') return active.filter(p => p.state === 'ok');
-  if (activeFilter === 'attention') return active.filter(p =>
-    p.state !== 'ok' || (p.windows && p.windows.some(w => w.usedPercent >= 80))
-  );
+  if (activeFilter === 'attention') return active.filter(p => p.state !== 'ok');
   return active; // 'all'
 }
 
@@ -62,7 +60,7 @@ function computeCounts(providers) {
   return {
     all: active.length,
     connected: active.filter(p => p.state === 'ok').length,
-    attention: active.filter(p => p.state !== 'ok' || (p.windows && p.windows.some(w => w.usedPercent >= 80))).length,
+    attention: active.filter(p => p.state !== 'ok').length,
   };
 }
 
@@ -151,28 +149,31 @@ function renderCard(provider) {
 function renderWindow(win) {
   const pct = Math.min(100, Math.max(0, win.usedPercent));
   const colorClass = pct >= 100 ? 'bar-critical' : pct >= 80 ? 'bar-warning' : 'bar-ok';
+  const barOpacity = (0.4 + (pct / 100) * 0.6).toFixed(2);
   return `
     <div class="window-row">
       <div class="window-meta">
         <span class="window-label">${escHtml(win.label)}</span>
-        <span class="window-pct">${pct}%</span>
-        <span class="window-countdown" data-resets-at="${escHtml(win.resetsAt)}">…</span>
       </div>
-      <div class="progress-bar-track">
-        <div class="progress-bar ${colorClass}"
-             style="width:${pct}%"
-             role="progressbar"
-             aria-valuenow="${pct}"
-             aria-valuemin="0"
-             aria-valuemax="100"
-             aria-label="${escHtml(win.label)}"></div>
+      <div class="window-bar-row">
+        <div class="progress-bar-track">
+          <div class="progress-bar ${colorClass}"
+               style="width:${pct}%;--bar-opacity:${barOpacity}"
+               role="progressbar"
+               aria-valuenow="${pct}"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               aria-label="${escHtml(win.label)}"></div>
+        </div>
+        <span class="window-pct">${pct}% used</span>
       </div>
+      <span class="window-countdown" data-resets-at="${escHtml(win.resetsAt)}">…</span>
     </div>`;
 }
 
 function renderCredits(credits) {
   const parts = [];
-  if (credits.balanceUsd != null) parts.push(`Balance: $${credits.balanceUsd.toFixed(2)}`);
+  if (credits.balanceUsd != null) parts.push(`$${credits.balanceUsd.toFixed(2)}`);
   if (credits.valueUsd != null) parts.push(`Used: $${credits.valueUsd.toFixed(2)}`);
   return parts.length ? `<p class="credits-row">${escHtml(credits.label)}: ${parts.join(' · ')}</p>` : '';
 }
