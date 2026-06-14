@@ -231,8 +231,8 @@ function renderLastUpdated() {
   el.textContent = `updated ${diffH}h ago`;
 }
 
-// Keep the "X ago" label ticking every 5 seconds
-setInterval(renderLastUpdated, 5000);
+// Keep the "X ago" label ticking every minute
+setInterval(renderLastUpdated, 60000);
 
 function escHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
