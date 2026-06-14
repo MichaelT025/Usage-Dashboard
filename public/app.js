@@ -140,10 +140,28 @@ function formatDuration(ms) {
 // Tick countdowns every second
 setInterval(updateCountdowns, 1000);
 
+let lastGeneratedAt = null;
+
 function updateLastUpdated(generatedAt) {
-  const el = document.getElementById('last-updated');
-  if (el) el.textContent = 'Updated ' + new Date(generatedAt).toLocaleTimeString();
+  lastGeneratedAt = generatedAt;
+  renderLastUpdated();
 }
+
+function renderLastUpdated() {
+  const el = document.getElementById('last-updated');
+  if (!el || !lastGeneratedAt) return;
+  const diffMs = Date.now() - new Date(lastGeneratedAt).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 5)  { el.textContent = 'updated just now'; return; }
+  if (diffSec < 60) { el.textContent = `updated ${diffSec}s ago`; return; }
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) { el.textContent = `updated ${diffMin}m ago`; return; }
+  const diffH = Math.floor(diffMin / 60);
+  el.textContent = `updated ${diffH}h ago`;
+}
+
+// Keep the "X ago" label ticking every 5 seconds
+setInterval(renderLastUpdated, 5000);
 
 function escHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);

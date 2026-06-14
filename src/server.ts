@@ -70,7 +70,11 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
     const poller = new Poller({ adapters, intervalSec: config.refreshIntervalSec });
     poller.start();
 
-    const publicDir = path.resolve(__dirname, 'public');
+    // In production (dist/server.js): __dirname = dist/, public is at dist/public/
+    // In dev (tsx src/server.ts): __dirname = src/, public is at ../public/ (project root)
+    const publicDir = fs.existsSync(path.resolve(__dirname, 'public'))
+      ? path.resolve(__dirname, 'public')
+      : path.resolve(__dirname, '..', 'public');
 
     const server = http.createServer(async (req, res) => {
       const method = req.method ?? 'GET';
