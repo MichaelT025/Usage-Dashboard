@@ -11,6 +11,12 @@ async function fetchStatus() {
   return res.json();
 }
 
+async function triggerBackendRefresh() {
+  const res = await fetch('/api/refresh', { method: 'POST' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 async function refresh(manual = false) {
   if (isRefreshing) return;
   isRefreshing = true;
@@ -18,7 +24,7 @@ async function refresh(manual = false) {
   if (btn) btn.disabled = true;
 
   try {
-    const data = await fetchStatus();
+    const data = manual ? await triggerBackendRefresh() : await fetchStatus();
     renderProviders(data.providers);
     updateLastUpdated(data.generatedAt);
     scheduleAutoRefresh(REFRESH_INTERVAL_MS);

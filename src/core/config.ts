@@ -1,7 +1,5 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { configDir, configPath, configExamplePath } from './paths.js';
-import { redactSecrets } from './redact.js';
 
 export interface AppConfig {
   refreshIntervalSec: number;
@@ -82,7 +80,7 @@ export function saveConfig(partial: Partial<AppConfig>): void {
   fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2), 'utf8');
 
   // Best-effort restrictive permissions (POSIX only)
-  try { fs.chmodSync(tmpPath, 0o600); } catch { /* Windows — no-op */ }
+  try { fs.chmodSync(tmpPath, 0o600); } catch { void 0; /* Windows — no-op */ }
 
   fs.renameSync(tmpPath, configPath());
 }
