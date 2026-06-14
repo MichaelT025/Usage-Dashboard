@@ -3,23 +3,69 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LLM Usage Dashboard</title>
+  <title>Usage Dashboard</title>
+  <!-- Font preloads (self-hosted, no CDN) -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="fonts/JetBrainsMono-Regular.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="fonts/JetBrainsMono-Medium.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="fonts/JetBrainsMono-Bold.woff2">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <h1>LLM Usage</h1>
+  <!-- CLASS/ID CONTRACT (frozen — Tasks 5 and 6 both target these selectors)
+    Header:   header.app-header > .brand(h1.app-title + .app-subtitle) + .header-actions(#last-updated.last-updated + #refresh-btn.btn-refresh + #settings-btn.btn-settings)
+    Toolbar:  .toolbar > .toolbar-label + .filter-pills > button.filter-pill[data-filter=all|connected|attention] > span.pill-label + span.pill-count
+              Active pill: class is-active + aria-pressed="true"
+    Grid:     main.grid-wrap > #providers-grid.providers-grid (cards only) + .grid-empty.hidden (sibling, never inside #providers-grid)
+    Card:     article.provider-card.state-<state>[data-provider=<id>]
+              .card-header > .provider-icon(img or .is-monogram) + .card-title + .card-plan? + .status-dot.dot-<ok|warn|error>
+              .card-body > .window-row > .window-meta(.window-label+.window-pct+.window-countdown[data-resets-at]) + .progress-bar-track>.progress-bar.bar-<ok|warning|critical>
+              .credits-row (optional)
+              .error-body > .error-label + .error-code? + .error-hint?
+    Drawer:   #settings-drawer.drawer > .drawer-backdrop + .drawer-panel > (#drawer-close + settings content with IDs: s-wsid, s-cookie, s-interval, s-save, s-cancel, s-feedback)
+  -->
+
+  <header class="app-header">
+    <div class="brand">
+      <h1 class="app-title">Usage Dashboard</h1>
+      <span class="app-subtitle">LLM USAGE</span>
+    </div>
     <div class="header-actions">
       <span id="last-updated" class="last-updated"></span>
-      <button id="refresh-btn" class="btn-refresh">↻ Refresh</button>
-      <button id="settings-btn" class="btn-settings" title="Settings">⚙</button>
+      <button id="refresh-btn" class="btn-refresh" type="button">&#8635; Refresh</button>
+      <button id="settings-btn" class="btn-settings" type="button" title="Settings" aria-label="Settings">&#9881;</button>
     </div>
   </header>
-  <main id="providers-grid" class="providers-grid">
-    <div class="loading">Loading...</div>
+
+  <div class="toolbar">
+    <span class="toolbar-label">PROVIDERS</span>
+    <div class="filter-pills" role="group" aria-label="Filter providers">
+      <button class="filter-pill is-active" data-filter="all" type="button" aria-pressed="true">
+        <span class="pill-label">All</span><span class="pill-count"></span>
+      </button>
+      <button class="filter-pill" data-filter="connected" type="button" aria-pressed="false">
+        <span class="pill-label">Connected</span><span class="pill-count"></span>
+      </button>
+      <button class="filter-pill" data-filter="attention" type="button" aria-pressed="false">
+        <span class="pill-label">Needs&nbsp;attention</span><span class="pill-count"></span>
+      </button>
+    </div>
+  </div>
+
+  <main class="grid-wrap">
+    <div id="providers-grid" class="providers-grid">
+      <div class="loading">Loading…</div>
+    </div>
+    <div class="grid-empty hidden">No providers match this filter.</div>
   </main>
-  <!-- Settings modal placeholder — wired by T15 -->
-  <div id="settings-modal" class="modal hidden"></div>
+
+  <!-- Settings drawer (shell — app.js fills the panel content on first open) -->
+  <div id="settings-drawer" class="drawer">
+    <div class="drawer-backdrop"></div>
+    <aside class="drawer-panel">
+      <!-- populated by app.js initDrawer() -->
+    </aside>
+  </div>
+
   <script src="app.js" type="module"></script>
 </body>
 </html>
