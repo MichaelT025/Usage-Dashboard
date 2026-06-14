@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClaudeToken } from '../core/credentials.js';
-import { ClaudeAdapter } from './claude.js';
+import { ClaudeAdapter, _resetClaudeCache } from './claude.js';
 
 vi.mock('../core/credentials.js', () => ({
   getClaudeToken: vi.fn(),
@@ -18,6 +18,10 @@ async function writeEvidence(filename: string, result: unknown): Promise<void> {
 }
 
 describe('ClaudeAdapter', () => {
+  beforeEach(() => {
+    _resetClaudeCache(); // clear module-level cache between tests
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -49,6 +53,7 @@ describe('ClaudeAdapter', () => {
         Authorization: `Bearer ${TOKEN}`,
         'anthropic-beta': 'oauth-2025-04-20',
         Accept: 'application/json',
+        'User-Agent': 'claude-code/2.1.0',
       },
     });
 
@@ -78,6 +83,7 @@ describe('ClaudeAdapter', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 429,
+      headers: { get: (_: string) => null },
       json: async () => ({}),
     }));
 

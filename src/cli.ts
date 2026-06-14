@@ -71,7 +71,7 @@ if (!existsSync(configPath())) {
     console.log(`📋 Created example config at ~/.llm-usage/config.example.json`);
     console.log(`   Run \`llm-usage setup\` to configure OpenCode Go credentials.\n`);
   } catch {
-    // non-fatal
+    void 0; // non-fatal — writeExampleConfig can fail silently on first run
   }
 }
 

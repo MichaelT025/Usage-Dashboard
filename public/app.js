@@ -11,6 +11,12 @@ async function fetchStatus() {
   return res.json();
 }
 
+async function triggerBackendRefresh() {
+  const res = await fetch('/api/refresh', { method: 'POST' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 async function refresh(manual = false) {
   if (isRefreshing) return;
   isRefreshing = true;
@@ -18,7 +24,7 @@ async function refresh(manual = false) {
   if (btn) btn.disabled = true;
 
   try {
-    const data = await fetchStatus();
+    const data = manual ? await triggerBackendRefresh() : await fetchStatus();
     renderProviders(data.providers);
     updateLastUpdated(data.generatedAt);
     scheduleAutoRefresh(REFRESH_INTERVAL_MS);
@@ -123,21 +129,43 @@ function updateCountdowns() {
 
 function formatDuration(ms) {
   const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${sec}s`;
-  return `${sec}s`;
+  const totalMin = Math.floor(s / 60);
+  const totalH = Math.floor(s / 3600);
+  const totalD = Math.floor(s / 86400);
+  const remH = totalH % 24;
+  const remM = totalMin % 60;
+  const remS = s % 60;
+  if (totalD >= 1) return `${totalD}d ${remH}h`;
+  if (totalH >= 1) return `${totalH}h ${remM}m`;
+  if (totalMin >= 1) return `${totalMin}m ${remS}s`;
+  return `${remS}s`;
 }
 
 // Tick countdowns every second
 setInterval(updateCountdowns, 1000);
 
+let lastGeneratedAt = null;
+
 function updateLastUpdated(generatedAt) {
-  const el = document.getElementById('last-updated');
-  if (el) el.textContent = 'Updated ' + new Date(generatedAt).toLocaleTimeString();
+  lastGeneratedAt = generatedAt;
+  renderLastUpdated();
 }
+
+function renderLastUpdated() {
+  const el = document.getElementById('last-updated');
+  if (!el || !lastGeneratedAt) return;
+  const diffMs = Date.now() - new Date(lastGeneratedAt).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 5)  { el.textContent = 'updated just now'; return; }
+  if (diffSec < 60) { el.textContent = `updated ${diffSec}s ago`; return; }
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) { el.textContent = `updated ${diffMin}m ago`; return; }
+  const diffH = Math.floor(diffMin / 60);
+  el.textContent = `updated ${diffH}h ago`;
+}
+
+// Keep the "X ago" label ticking every 5 seconds
+setInterval(renderLastUpdated, 5000);
 
 function escHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
