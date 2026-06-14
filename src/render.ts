@@ -62,15 +62,15 @@ export function formatDuration(ms: number): string {
   return '0m';
 }
 
-/** Returns "just now" for < 60 s, then "1m", "2m", "1h", "2h" etc. */
+/** Returns "updated just now" for < 60 s, then "updated 1m ago", "updated 2m ago", "updated 1h ago" etc. */
 export function formatUpdatedAgo(generatedAtISO: string): string {
   const diffMs = Date.now() - new Date(generatedAtISO).getTime();
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
+  if (diffSec < 60) return 'updated just now';
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
+  if (diffMin < 60) return `updated ${diffMin}m ago`;
   const diffH = Math.floor(diffMin / 60);
-  return `${diffH}h`;
+  return `updated ${diffH}h ago`;
 }
 
 /**
