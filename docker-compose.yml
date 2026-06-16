@@ -1,0 +1,22 @@
+services:
+  llm-usage:
+    build: .
+    container_name: llm-usage
+    restart: unless-stopped
+    user: "1000:1000"
+    ports:
+      - "127.0.0.1:7878:7878"
+    environment:
+      - ALLOWED_ORIGIN=https://usage.mktesfaye.com
+    volumes:
+      - llm_usage_config:/home/node/.llm-usage
+      - ${HOME}/.claude/.credentials.json:/home/node/.claude/.credentials.json:ro
+      - ${HOME}/.codex/auth.json:/home/node/.codex/auth.json:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7878/api/status',r=>{process.exit(r.statusCode===200?0:1)})"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  llm_usage_config:

@@ -123,7 +123,8 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       if (method === 'POST' && pathname === '/api/config') {
         // Same-origin guard: reject requests with a non-localhost Origin header
         const origin = req.headers['origin'] ?? '';
-        if (origin !== '' && !origin.startsWith('http://localhost:') && !origin.startsWith('http://127.0.0.1:')) {
+        const allowedOrigin = process.env.ALLOWED_ORIGIN || '';
+        if (origin !== '' && !origin.startsWith('http://localhost:') && !origin.startsWith('http://127.0.0.1:') && origin !== allowedOrigin) {
           res.writeHead(403, { 'Content-Type': 'text/plain' });
           res.end('Forbidden: cross-origin request');
           return;
@@ -210,7 +211,8 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       reject(err);
     });
 
-    server.listen(opts.port, '127.0.0.1', () => {
+    const bindAddr = process.env.BIND_ADDRESS || '127.0.0.1';
+    server.listen(opts.port, bindAddr, () => {
       const url = `http://localhost:${opts.port}`;
       resolve({
         url,
