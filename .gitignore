@@ -5,3 +5,4 @@ dist/
 .omo/
 # Config file contains secrets — NEVER commit
 # ~/.llm-usage/config.json
+.vscode/

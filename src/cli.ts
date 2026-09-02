@@ -38,7 +38,8 @@ if (subcommand === 'setup') {
 }
 
 if (args.includes('--help') || args.includes('-h')) {
-  console.log(`
+  console.log(
+    `
 llm-usage — Local LLM subscription usage monitor
 
 USAGE
@@ -63,7 +64,8 @@ OPTIONS
 
 CONFIG
   ~/.llm-usage/config.json      (run \`llm-usage setup\` to configure)
-  `.trim());
+  `.trim(),
+  );
   process.exit(0);
 }
 
@@ -72,7 +74,9 @@ const json = args.includes('--json');
 const dash = args.includes('--dash');
 
 if ([watch, json, dash].filter(Boolean).length > 1) {
-  console.error('Error: --watch/--tui, --json, and --dash are mutually exclusive');
+  console.error(
+    'Error: --watch/--tui, --json, and --dash are mutually exclusive',
+  );
   process.exit(1);
 }
 
@@ -100,8 +104,12 @@ if (dash) {
   if (!existsSync(configPath())) {
     try {
       writeExampleConfig();
-      console.log('📋 Created example config at ~/.llm-usage/config.example.json');
-      console.log('   Run `llm-usage setup` to configure OpenCode Go credentials.\n');
+      console.log(
+        '📋 Created example config at ~/.llm-usage/config.example.json',
+      );
+      console.log(
+        '   Run `llm-usage setup` to configure OpenCode Go credentials.\n',
+      );
     } catch {
       void 0;
     }
@@ -122,19 +130,23 @@ function withTimeout(
 ): Promise<UsageData> {
   return Promise.race([
     p,
-    new Promise<UsageData>(res =>
-      setTimeout(() => res({
-        providerId: id as import('./core/types.js').ProviderId,
-        displayName,
-        state: 'unavailable',
-        windows: [],
-        error: {
-          code: 'NETWORK',
-          message: 'Request timed out',
-          hint: 'The provider did not respond in time — check network connectivity',
-        },
-        fetchedAt: new Date().toISOString(),
-      }), ms)
+    new Promise<UsageData>((res) =>
+      setTimeout(
+        () =>
+          res({
+            providerId: id as import('./core/types.js').ProviderId,
+            displayName,
+            state: 'unavailable',
+            windows: [],
+            error: {
+              code: 'NETWORK',
+              message: 'Request timed out',
+              hint: 'The provider did not respond in time — check network connectivity',
+            },
+            fetchedAt: new Date().toISOString(),
+          }),
+        ms,
+      ),
     ),
   ]);
 }
@@ -145,7 +157,7 @@ function buildWrappedAdapters(): IProviderAdapter[] {
     new CodexAdapter(),
     new OpenCodeGoAdapter(),
   ];
-  return base.map(a => ({
+  return base.map((a) => ({
     id: a.id,
     displayName: a.displayName,
     fetch: () => withTimeout(a.fetch(), 15_000, a.id, a.displayName),
@@ -156,18 +168,24 @@ async function dashMain(): Promise<void> {
   // --- Parse flags ---
   const noOpen = args.includes('--no-open');
   const portFlagIdx = args.indexOf('--port');
-  const portOverride = portFlagIdx !== -1 ? parseInt(args[portFlagIdx + 1] ?? '', 10) : NaN;
+  const portOverride =
+    portFlagIdx !== -1 ? parseInt(args[portFlagIdx + 1] ?? '', 10) : NaN;
 
   // --- Load config ---
   const config = loadConfig();
-  const port = (!isNaN(portOverride) && portOverride > 0) ? portOverride : config.port;
+  const port =
+    !isNaN(portOverride) && portOverride > 0 ? portOverride : config.port;
 
   // --- First-run: write example config if none exists ---
   if (!existsSync(configPath())) {
     try {
       writeExampleConfig();
-      console.log(`📋 Created example config at ~/.llm-usage/config.example.json`);
-      console.log(`   Run \`llm-usage setup\` to configure OpenCode Go credentials.\n`);
+      console.log(
+        `📋 Created example config at ~/.llm-usage/config.example.json`,
+      );
+      console.log(
+        `   Run \`llm-usage setup\` to configure OpenCode Go credentials.\n`,
+      );
     } catch {
       void 0; // non-fatal — writeExampleConfig can fail silently on first run
     }
@@ -180,7 +198,10 @@ async function dashMain(): Promise<void> {
     server = await startServer({ port });
   } catch (err: unknown) {
     // EADDRINUSE: assume an existing instance is already running
-    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+    if (
+      err instanceof Error &&
+      (err as NodeJS.ErrnoException).code === 'EADDRINUSE'
+    ) {
       const existingUrl = `http://localhost:${port}`;
       console.log(`llm-usage is already running at ${existingUrl}`);
       if (!noOpen) {
@@ -188,7 +209,10 @@ async function dashMain(): Promise<void> {
       }
       process.exit(0);
     }
-    console.error('Failed to start server:', err instanceof Error ? err.message : String(err));
+    console.error(
+      'Failed to start server:',
+      err instanceof Error ? err.message : String(err),
+    );
     process.exit(1);
   }
 
@@ -211,9 +235,12 @@ async function openBrowser(url: string): Promise<void> {
   const { platform } = process;
   try {
     const { spawn } = await import('node:child_process');
-    const cmd = platform === 'win32' ? 'cmd'
-      : platform === 'darwin' ? 'open'
-      : 'xdg-open';
+    const cmd =
+      platform === 'win32'
+        ? 'cmd'
+        : platform === 'darwin'
+          ? 'open'
+          : 'xdg-open';
     const cmdArgs = platform === 'win32' ? ['/c', 'start', url] : [url];
     spawn(cmd, cmdArgs, { detached: true, stdio: 'ignore' }).unref();
   } catch {

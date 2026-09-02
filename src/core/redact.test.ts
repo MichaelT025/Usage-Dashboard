@@ -27,7 +27,10 @@ describe('redactSecrets', () => {
   });
 
   it('walks arrays and removes secrets', () => {
-    const result = redactSecrets([{ token: 'secret' }, 'sk-ant-test']) as Array<unknown>;
+    const result = redactSecrets([
+      { token: 'secret' },
+      'sk-ant-test',
+    ]) as Array<unknown>;
 
     expect(result[0]).toEqual({ token: '[REDACTED]' });
     expect(result[1]).toBe('[REDACTED]');
@@ -41,7 +44,9 @@ describe('redactSecrets', () => {
 
 describe('safeErrorMessage', () => {
   it('redacts secrets from error messages', () => {
-    const message = safeErrorMessage(new Error('failed with Bearer sk-ant-fake-token'));
+    const message = safeErrorMessage(
+      new Error('failed with Bearer sk-ant-fake-token'),
+    );
 
     expect(message).toContain('[REDACTED]');
     expect(message).not.toContain('sk-ant-fake-token');

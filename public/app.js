@@ -3,8 +3,8 @@ let refreshIntervalMs = 180_000; // default; synced from /api/config on load
 let refreshTimer = null;
 let isRefreshing = false;
 
-let activeFilter = 'all';      // persists across re-renders
-let latestProviders = [];      // last fetched providers array (for re-filter on pill click)
+let activeFilter = 'all'; // persists across re-renders
+let latestProviders = []; // last fetched providers array (for re-filter on pill click)
 
 // --- Fetch & render ---
 
@@ -49,18 +49,20 @@ function scheduleAutoRefresh(ms) {
 
 function applyFilter(providers) {
   // Always exclude not_implemented from everything
-  const active = providers.filter(p => p.state !== 'not_implemented');
-  if (activeFilter === 'connected') return active.filter(p => p.state === 'ok');
-  if (activeFilter === 'attention') return active.filter(p => p.state !== 'ok');
+  const active = providers.filter((p) => p.state !== 'not_implemented');
+  if (activeFilter === 'connected')
+    return active.filter((p) => p.state === 'ok');
+  if (activeFilter === 'attention')
+    return active.filter((p) => p.state !== 'ok');
   return active; // 'all'
 }
 
 function computeCounts(providers) {
-  const active = providers.filter(p => p.state !== 'not_implemented');
+  const active = providers.filter((p) => p.state !== 'not_implemented');
   return {
     all: active.length,
-    connected: active.filter(p => p.state === 'ok').length,
-    attention: active.filter(p => p.state !== 'ok').length,
+    connected: active.filter((p) => p.state === 'ok').length,
+    attention: active.filter((p) => p.state !== 'ok').length,
   };
 }
 
@@ -74,7 +76,7 @@ function renderProviders(providers) {
 
   // Update pill counts
   const counts = computeCounts(providers);
-  document.querySelectorAll('.filter-pill').forEach(btn => {
+  document.querySelectorAll('.filter-pill').forEach((btn) => {
     const f = btn.dataset.filter;
     const countEl = btn.querySelector('.pill-count');
     if (countEl) countEl.textContent = counts[f] ?? '';
@@ -91,8 +93,9 @@ function renderProviders(providers) {
     grid.style.display = '';
     grid.innerHTML = shown.map(renderCard).join('');
     // Programmatic icon fallback (no inline onerror — module scope not visible in HTML strings)
-    grid.querySelectorAll('img.provider-icon').forEach(img => {
-      img.onerror = () => img.replaceWith(monogramTile(img.dataset.monogram || '?'));
+    grid.querySelectorAll('img.provider-icon').forEach((img) => {
+      img.onerror = () =>
+        img.replaceWith(monogramTile(img.dataset.monogram || '?'));
     });
   }
 
@@ -125,7 +128,10 @@ function renderCard(provider) {
         </div>
       </article>`;
   }
-  const stateLabel = { unavailable: 'Unavailable', unconfigured: 'Not Configured' }[provider.state] ?? provider.state;
+  const stateLabel =
+    { unavailable: 'Unavailable', unconfigured: 'Not Configured' }[
+      provider.state
+    ] ?? provider.state;
   const hint = provider.error?.hint ?? '';
   const code = provider.error?.code ?? '';
   const dotClass = provider.state === 'unavailable' ? 'dot-error' : 'dot-warn';
@@ -148,7 +154,8 @@ function renderCard(provider) {
 
 function renderWindow(win) {
   const pct = Math.min(100, Math.max(0, win.usedPercent));
-  const colorClass = pct >= 100 ? 'bar-critical' : pct >= 80 ? 'bar-warning' : 'bar-ok';
+  const colorClass =
+    pct >= 100 ? 'bar-critical' : pct >= 80 ? 'bar-warning' : 'bar-ok';
   const barOpacity = (0.4 + (pct / 100) * 0.6).toFixed(2);
   return `
     <div class="window-row">
@@ -173,9 +180,13 @@ function renderWindow(win) {
 
 function renderCredits(credits) {
   const parts = [];
-  if (credits.balanceUsd != null) parts.push(`$${credits.balanceUsd.toFixed(2)}`);
-  if (credits.valueUsd != null) parts.push(`Used: $${credits.valueUsd.toFixed(2)}`);
-  return parts.length ? `<p class="credits-row">${escHtml(credits.label)}: ${parts.join(' · ')}</p>` : '';
+  if (credits.balanceUsd != null)
+    parts.push(`$${credits.balanceUsd.toFixed(2)}`);
+  if (credits.valueUsd != null)
+    parts.push(`Used: $${credits.valueUsd.toFixed(2)}`);
+  return parts.length
+    ? `<p class="credits-row">${escHtml(credits.label)}: ${parts.join(' · ')}</p>`
+    : '';
 }
 
 // --- Live countdown ticking ---
@@ -186,11 +197,12 @@ function startCountdowns() {
 
 function updateCountdowns() {
   const now = Date.now();
-  document.querySelectorAll('.window-countdown').forEach(el => {
+  document.querySelectorAll('.window-countdown').forEach((el) => {
     const resetsAt = el.dataset.resetsAt;
     if (!resetsAt) return;
     const delta = new Date(resetsAt).getTime() - now;
-    el.textContent = delta <= 0 ? 'resetting…' : 'resets in ' + formatDuration(delta);
+    el.textContent =
+      delta <= 0 ? 'resetting…' : 'resets in ' + formatDuration(delta);
   });
 }
 
@@ -223,10 +235,19 @@ function renderLastUpdated() {
   if (!el || !lastGeneratedAt) return;
   const diffMs = Date.now() - new Date(lastGeneratedAt).getTime();
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 5)  { el.textContent = 'updated just now'; return; }
-  if (diffSec < 60) { el.textContent = `updated ${diffSec}s ago`; return; }
+  if (diffSec < 5) {
+    el.textContent = 'updated just now';
+    return;
+  }
+  if (diffSec < 60) {
+    el.textContent = `updated ${diffSec}s ago`;
+    return;
+  }
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) { el.textContent = `updated ${diffMin}m ago`; return; }
+  if (diffMin < 60) {
+    el.textContent = `updated ${diffMin}m ago`;
+    return;
+  }
   const diffH = Math.floor(diffMin / 60);
   el.textContent = `updated ${diffH}h ago`;
 }
@@ -235,31 +256,42 @@ function renderLastUpdated() {
 setInterval(renderLastUpdated, 60000);
 
 function escHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
+        c
+      ],
+  );
 }
 
 // --- Wiring ---
 
-document.getElementById('refresh-btn')?.addEventListener('click', () => refresh(true));
+document
+  .getElementById('refresh-btn')
+  ?.addEventListener('click', () => refresh(true));
 
 // Sync refresh interval from server config on load
 (async function initRefreshInterval() {
   try {
-    const cfg = await fetch('/api/config').then(r => r.json());
-    if (cfg.refreshIntervalSec) refreshIntervalMs = cfg.refreshIntervalSec * 1000;
-  } catch { /* keep default */ }
+    const cfg = await fetch('/api/config').then((r) => r.json());
+    if (cfg.refreshIntervalSec)
+      refreshIntervalMs = cfg.refreshIntervalSec * 1000;
+  } catch {
+    /* keep default */
+  }
 })();
 
 // Initial load
 refresh();
 
 // Filter pill wiring
-document.querySelectorAll('.filter-pill').forEach(btn => {
+document.querySelectorAll('.filter-pill').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (isRefreshing) return; // don't interfere during refresh
     activeFilter = btn.dataset.filter;
     // Update active state + aria
-    document.querySelectorAll('.filter-pill').forEach(b => {
+    document.querySelectorAll('.filter-pill').forEach((b) => {
       b.classList.toggle('is-active', b === btn);
       b.setAttribute('aria-pressed', String(b === btn));
     });
@@ -295,9 +327,11 @@ function initDrawer() {
 
   gearBtn.addEventListener('click', openDrawer);
 
-  drawer.querySelector('.drawer-backdrop')?.addEventListener('click', closeDrawer);
+  drawer
+    .querySelector('.drawer-backdrop')
+    ?.addEventListener('click', closeDrawer);
 
-  document.addEventListener('keydown', e => {
+  document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && drawer.classList.contains('is-open')) {
       closeDrawer();
     }
@@ -307,10 +341,11 @@ function initDrawer() {
     const panel = drawer.querySelector('.drawer-panel');
     if (!panel) return;
     try {
-      const data = await fetch('/api/config').then(r => r.json());
+      const data = await fetch('/api/config').then((r) => r.json());
       renderDrawer(panel, data);
     } catch {
-      panel.innerHTML = '<p style="padding:1rem;color:var(--crit)">Failed to load config</p>';
+      panel.innerHTML =
+        '<p style="padding:1rem;color:var(--crit)">Failed to load config</p>';
     }
   }
 
@@ -355,7 +390,9 @@ function initDrawer() {
       </div>`;
 
     // Wire close button (rendered dynamically)
-    document.getElementById('drawer-close')?.addEventListener('click', closeDrawer);
+    document
+      .getElementById('drawer-close')
+      ?.addEventListener('click', closeDrawer);
     document.getElementById('s-cancel')?.addEventListener('click', closeDrawer);
     document.getElementById('s-save')?.addEventListener('click', doSave);
 
@@ -366,7 +403,10 @@ function initDrawer() {
   async function doSave() {
     const wsid = document.getElementById('s-wsid')?.value?.trim();
     const cookie = document.getElementById('s-cookie')?.value?.trim();
-    const interval = parseInt(document.getElementById('s-interval')?.value ?? '180', 10);
+    const interval = parseInt(
+      document.getElementById('s-interval')?.value ?? '180',
+      10,
+    );
     const payload = {};
     if (wsid) payload.opencodeWorkspaceId = wsid;
     if (cookie) payload.opencodeAuthCookie = cookie;

@@ -63,7 +63,7 @@ export class Poller {
   }
 
   private poll(): Promise<StatusResponse> {
-    const activeAdapters = this.adapters.filter(adapter => {
+    const activeAdapters = this.adapters.filter((adapter) => {
       const remaining = this.backoff.get(adapter.id) ?? 0;
       if (remaining > 0) {
         this.backoff.set(adapter.id, remaining - 1);
@@ -72,28 +72,34 @@ export class Poller {
       return true;
     });
 
-    const activeIds = new Set(activeAdapters.map(adapter => adapter.id));
-    const wrappedAdapters: IProviderAdapter[] = activeAdapters.map(adapter => ({
-      id: adapter.id,
-      displayName: adapter.displayName,
-      fetch: async () => {
-        const result = await adapter.fetch();
-        if (result.error?.code === 'RATE_LIMITED') {
-          this.backoff.set(adapter.id, 2);
-        }
-        return result;
-      },
-    }));
+    const activeIds = new Set(activeAdapters.map((adapter) => adapter.id));
+    const wrappedAdapters: IProviderAdapter[] = activeAdapters.map(
+      (adapter) => ({
+        id: adapter.id,
+        displayName: adapter.displayName,
+        fetch: async () => {
+          const result = await adapter.fetch();
+          if (result.error?.code === 'RATE_LIMITED') {
+            this.backoff.set(adapter.id, 2);
+          }
+          return result;
+        },
+      }),
+    );
 
     const skippedResults: UsageData[] = this.adapters
-      .filter(adapter => !activeIds.has(adapter.id))
-      .map(adapter => this.cachedOrRateLimited(adapter));
+      .filter((adapter) => !activeIds.has(adapter.id))
+      .map((adapter) => this.cachedOrRateLimited(adapter));
 
     const pollPromise = (async () => {
       try {
         const freshResult = await aggregate(wrappedAdapters);
         const providers = [...freshResult.providers, ...skippedResults];
-        providers.sort((left, right) => this.adapterIndex(left.providerId) - this.adapterIndex(right.providerId));
+        providers.sort(
+          (left, right) =>
+            this.adapterIndex(left.providerId) -
+            this.adapterIndex(right.providerId),
+        );
 
         const result: StatusResponse = {
           providers,
@@ -111,7 +117,9 @@ export class Poller {
   }
 
   private cachedOrRateLimited(adapter: IProviderAdapter): UsageData {
-    const cached = this.latest?.providers.find(provider => provider.providerId === adapter.id);
+    const cached = this.latest?.providers.find(
+      (provider) => provider.providerId === adapter.id,
+    );
     if (cached) return cached;
 
     return {
@@ -129,6 +137,6 @@ export class Poller {
   }
 
   private adapterIndex(providerId: string): number {
-    return this.adapters.findIndex(adapter => adapter.id === providerId);
+    return this.adapters.findIndex((adapter) => adapter.id === providerId);
   }
 }

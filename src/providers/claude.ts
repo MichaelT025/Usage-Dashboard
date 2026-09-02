@@ -1,4 +1,9 @@
-import type { IProviderAdapter, ProviderError, QuotaWindow, UsageData } from '../core/types.js';
+import type {
+  IProviderAdapter,
+  ProviderError,
+  QuotaWindow,
+  UsageData,
+} from '../core/types.js';
 import { getClaudeToken } from '../core/credentials.js';
 import { redactSecrets, safeErrorMessage } from '../core/redact.js';
 
@@ -7,7 +12,7 @@ const BETA_HEADER = 'oauth-2025-04-20';
 // Mimic Claude Code's User-Agent — the usage endpoint rate-limits aggressively without it
 const CLAUDE_UA = 'claude-code/2.1.0';
 // In-memory cache: serve stale data within TTL, enforce 15-min cooldown after 429
-const SUCCESS_TTL_MS = 180_000;       // 3 min — matches default poll interval
+const SUCCESS_TTL_MS = 180_000; // 3 min — matches default poll interval
 const RATE_LIMIT_BACKOFF_MS = 900_000; // 15 min
 let cachedSuccess: UsageData | null = null;
 let cachedSuccessAtMs = 0;
@@ -51,7 +56,9 @@ function quotaWindow(label: string, source: ClaudeUsageWindow): QuotaWindow {
   };
 }
 
-export function parseClaudeUsage(json: ClaudeUsageResponse): Pick<UsageData, 'windows' | 'credits'> {
+export function parseClaudeUsage(
+  json: ClaudeUsageResponse,
+): Pick<UsageData, 'windows' | 'credits'> {
   const windows: QuotaWindow[] = [];
 
   if (json.five_hour) {
@@ -70,13 +77,14 @@ export function parseClaudeUsage(json: ClaudeUsageResponse): Pick<UsageData, 'wi
     windows.push(quotaWindow('Weekly (Opus)', json.seven_day_opus));
   }
 
-  const credits = json.extra_usage?.is_enabled && json.extra_usage.monthly_limit != null
-    ? {
-        label: 'Extra usage',
-        valueUsd: json.extra_usage.used_credits,
-        balanceUsd: undefined,
-      }
-    : undefined;
+  const credits =
+    json.extra_usage?.is_enabled && json.extra_usage.monthly_limit != null
+      ? {
+          label: 'Extra usage',
+          valueUsd: json.extra_usage.used_credits,
+          balanceUsd: undefined,
+        }
+      : undefined;
 
   return { windows, credits };
 }
@@ -107,11 +115,17 @@ export class ClaudeAdapter implements IProviderAdapter {
 
     const token = await getClaudeToken();
     if (!token) {
-      return errorUsage(this.id, this.displayName, {
-        code: 'NOT_CONFIGURED',
-        message: 'Claude token not found',
-        hint: 'Log into Claude Code (run `claude`) so credentials exist at ~/.claude/.credentials.json',
-      }, fetchedAt, 'unconfigured');
+      return errorUsage(
+        this.id,
+        this.displayName,
+        {
+          code: 'NOT_CONFIGURED',
+          message: 'Claude token not found',
+          hint: 'Log into Claude Code (run `claude`) so credentials exist at ~/.claude/.credentials.json',
+        },
+        fetchedAt,
+        'unconfigured',
+      );
     }
 
     const now = Date.now();
@@ -124,11 +138,16 @@ export class ClaudeAdapter implements IProviderAdapter {
     // Respect 429 cooldown — serve stale data if available, else surface error
     if (now < nextAllowedAtMs) {
       if (cachedSuccess) return cachedSuccess;
-      return errorUsage(this.id, this.displayName, {
-        code: 'RATE_LIMITED',
-        message: 'Claude usage API is cooling down after a 429',
-        hint: 'Too many requests — the dashboard will retry automatically in a few minutes',
-      }, fetchedAt);
+      return errorUsage(
+        this.id,
+        this.displayName,
+        {
+          code: 'RATE_LIMITED',
+          message: 'Claude usage API is cooling down after a 429',
+          hint: 'Too many requests — the dashboard will retry automatically in a few minutes',
+        },
+        fetchedAt,
+      );
     }
 
     let res: Response;
@@ -144,55 +163,81 @@ export class ClaudeAdapter implements IProviderAdapter {
     } catch (err) {
       void redactSecrets(err);
       const msg = safeErrorMessage(err);
-      return errorUsage(this.id, this.displayName, {
-        code: 'NETWORK',
-        message: msg,
-        hint: 'Could not reach the Claude usage API — check network connectivity',
-      }, fetchedAt);
+      return errorUsage(
+        this.id,
+        this.displayName,
+        {
+          code: 'NETWORK',
+          message: msg,
+          hint: 'Could not reach the Claude usage API — check network connectivity',
+        },
+        fetchedAt,
+      );
     }
 
     if (res.status === 401) {
-      return errorUsage(this.id, this.displayName, {
-        code: 'AUTH_EXPIRED',
-        message: 'Claude auth token expired',
-        hint: 'Re-authenticate Claude Code (run `claude` or re-login at claude.ai)',
-      }, fetchedAt);
+      return errorUsage(
+        this.id,
+        this.displayName,
+        {
+          code: 'AUTH_EXPIRED',
+          message: 'Claude auth token expired',
+          hint: 'Re-authenticate Claude Code (run `claude` or re-login at claude.ai)',
+        },
+        fetchedAt,
+      );
     }
 
     if (res.status === 429) {
       const retryAfter = Number(res.headers?.get?.('retry-after'));
-      const backoffMs = Number.isFinite(retryAfter) && retryAfter > 0
-        ? retryAfter * 1000
-        : RATE_LIMIT_BACKOFF_MS;
+      const backoffMs =
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : RATE_LIMIT_BACKOFF_MS;
       nextAllowedAtMs = Date.now() + backoffMs;
       if (cachedSuccess) return cachedSuccess; // serve stale rather than error card
-      return errorUsage(this.id, this.displayName, {
-        code: 'RATE_LIMITED',
-        message: 'Claude usage API rate limited',
-        hint: 'Too many requests — the dashboard will retry automatically in a few minutes',
-      }, fetchedAt);
+      return errorUsage(
+        this.id,
+        this.displayName,
+        {
+          code: 'RATE_LIMITED',
+          message: 'Claude usage API rate limited',
+          hint: 'Too many requests — the dashboard will retry automatically in a few minutes',
+        },
+        fetchedAt,
+      );
     }
 
     if (!res.ok) {
-      return errorUsage(this.id, this.displayName, {
-        code: 'NETWORK',
-        message: `HTTP ${res.status} from Claude usage API`,
-        hint: 'Claude usage API returned an unexpected error — try again later',
-      }, fetchedAt);
+      return errorUsage(
+        this.id,
+        this.displayName,
+        {
+          code: 'NETWORK',
+          message: `HTTP ${res.status} from Claude usage API`,
+          hint: 'Claude usage API returned an unexpected error — try again later',
+        },
+        fetchedAt,
+      );
     }
 
     let parsed: Pick<UsageData, 'windows' | 'credits'>;
     try {
-      const json = await res.json() as ClaudeUsageResponse;
+      const json = (await res.json()) as ClaudeUsageResponse;
       parsed = parseClaudeUsage(json);
     } catch (err) {
       void redactSecrets(err);
       const msg = safeErrorMessage(err);
-      return errorUsage(this.id, this.displayName, {
-        code: 'PARSE',
-        message: msg,
-        hint: 'Claude usage API returned an unexpected response — try again later',
-      }, fetchedAt);
+      return errorUsage(
+        this.id,
+        this.displayName,
+        {
+          code: 'PARSE',
+          message: msg,
+          hint: 'Claude usage API returned an unexpected response — try again later',
+        },
+        fetchedAt,
+      );
     }
 
     const result: UsageData = {

@@ -6,16 +6,21 @@ import { redactSecrets } from './redact.js';
  * Any thrown error is wrapped into a redacted 'unavailable' UsageData.
  * Returns a StatusResponse with generatedAt ISO timestamp.
  */
-export async function aggregate(adapters: IProviderAdapter[]): Promise<StatusResponse> {
-  const results = await Promise.allSettled(adapters.map(adapter => adapter.fetch()));
+export async function aggregate(
+  adapters: IProviderAdapter[],
+): Promise<StatusResponse> {
+  const results = await Promise.allSettled(
+    adapters.map((adapter) => adapter.fetch()),
+  );
 
   const providers: UsageData[] = results.map((result, index) => {
     if (result.status === 'fulfilled') return result.value;
 
     const adapter = adapters[index]!;
-    const errorMessage = result.reason instanceof Error
-      ? result.reason.message
-      : String(result.reason);
+    const errorMessage =
+      result.reason instanceof Error
+        ? result.reason.message
+        : String(result.reason);
 
     return {
       providerId: adapter.id,

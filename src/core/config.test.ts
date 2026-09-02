@@ -16,7 +16,12 @@ vi.mock('./paths.js', () => {
 // tmpDir is set before each test
 let tmpDir: string;
 
-import { loadConfig, validateConfig, saveConfig, writeExampleConfig } from './config.js';
+import {
+  loadConfig,
+  validateConfig,
+  saveConfig,
+  writeExampleConfig,
+} from './config.js';
 
 describe('config', () => {
   beforeEach(() => {
@@ -40,7 +45,10 @@ describe('config', () => {
   it('validateConfig error for empty workspaceId does not expose secret cookie value', () => {
     let thrown: unknown;
     try {
-      validateConfig({ opencodeWorkspaceId: '', opencodeAuthCookie: 'Fe26.2**SECRETCOOKIE' });
+      validateConfig({
+        opencodeWorkspaceId: '',
+        opencodeAuthCookie: 'Fe26.2**SECRETCOOKIE',
+      });
     } catch (e) {
       thrown = e;
     }
@@ -62,7 +70,7 @@ describe('config', () => {
 
     // No leftover .tmp. files
     const files = fs.readdirSync(tmpDir);
-    const tmpFiles = files.filter(f => f.includes('.tmp.'));
+    const tmpFiles = files.filter((f) => f.includes('.tmp.'));
     expect(tmpFiles).toHaveLength(0);
   });
 
@@ -71,14 +79,20 @@ describe('config', () => {
     // validateConfig would throw for < 30, so we bypass validation by writing directly
     // and test that loadConfig clamps on read
     const cfgPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(cfgPath, JSON.stringify({ refreshIntervalSec: 5, port: 7878 }), 'utf8');
+    fs.writeFileSync(
+      cfgPath,
+      JSON.stringify({ refreshIntervalSec: 5, port: 7878 }),
+      'utf8',
+    );
     const cfg = loadConfig();
     expect(cfg.refreshIntervalSec).toBe(30);
   });
 
   // 5. validateConfig — valid values don't throw
   it('validateConfig does not throw for valid values', () => {
-    expect(() => validateConfig({ port: 7878, refreshIntervalSec: 60 })).not.toThrow();
+    expect(() =>
+      validateConfig({ port: 7878, refreshIntervalSec: 60 }),
+    ).not.toThrow();
   });
 
   // Bonus: writeExampleConfig creates the file

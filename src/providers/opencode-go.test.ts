@@ -24,7 +24,11 @@ function readFixture(name: string): string {
 
 function writeEvidence(name: string, value: unknown): void {
   fs.mkdirSync(evidenceDir, { recursive: true });
-  fs.writeFileSync(path.join(evidenceDir, name), JSON.stringify(value, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(
+    path.join(evidenceDir, name),
+    JSON.stringify(value, null, 2) + '\n',
+    'utf8',
+  );
 }
 
 function configured(): ReturnType<typeof loadConfig> {
@@ -56,7 +60,9 @@ describe('OpenCodeGoAdapter', () => {
 
     expect(result.state).toBe('ok');
     expect(result.windows).toHaveLength(3);
-    expect(result.windows.map((window) => [window.label, window.usedPercent])).toEqual([
+    expect(
+      result.windows.map((window) => [window.label, window.usedPercent]),
+    ).toEqual([
       ['5h', 17],
       ['Weekly', 42],
       ['Monthly', 55],
@@ -88,7 +94,10 @@ describe('OpenCodeGoAdapter', () => {
   });
 
   it('returns unconfigured when workspace ID or auth cookie is missing', async () => {
-    vi.mocked(loadConfig).mockReturnValue({ refreshIntervalSec: 180, port: 7878 });
+    vi.mocked(loadConfig).mockReturnValue({
+      refreshIntervalSec: 180,
+      port: 7878,
+    });
 
     const result = await new OpenCodeGoAdapter().fetch();
 
@@ -101,7 +110,8 @@ describe('OpenCodeGoAdapter', () => {
   it('re-fetches fresh HTML on each call and keeps no adapter state', async () => {
     vi.mocked(loadConfig).mockReturnValue(configured());
     const secondHtml = happyHtml.replace('usagePercent:17', 'usagePercent:88');
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce(new Response(happyHtml, { status: 200 }))
       .mockResolvedValueOnce(new Response(secondHtml, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -111,7 +121,11 @@ describe('OpenCodeGoAdapter', () => {
     const second = await adapter.fetch();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(first.windows.find((window) => window.label === '5h')?.usedPercent).toBe(17);
-    expect(second.windows.find((window) => window.label === '5h')?.usedPercent).toBe(88);
+    expect(
+      first.windows.find((window) => window.label === '5h')?.usedPercent,
+    ).toBe(17);
+    expect(
+      second.windows.find((window) => window.label === '5h')?.usedPercent,
+    ).toBe(88);
   });
 });

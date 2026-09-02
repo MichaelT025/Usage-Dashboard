@@ -47,11 +47,5 @@ export function codexAuthPath(): string {
 export function opencodeAuthPath(): string {
   const override = process.env['OPENCODE_AUTH_PATH'];
   if (override) return path.resolve(override);
-  return path.join(
-    os.homedir(),
-    '.local',
-    'share',
-    'opencode',
-    'auth.json'
-  );
+  return path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
 }

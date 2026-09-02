@@ -5,9 +5,21 @@
  */
 
 const SENSITIVE_KEYS = new Set([
-  'authorization', 'cookie', 'token', 'access_token', 'accesstoken',
-  'apikey', 'api_key', 'key', 'password', 'credentials', 'secret',
-  'refreshtoken', 'refresh_token', 'idtoken', 'id_token',
+  'authorization',
+  'cookie',
+  'token',
+  'access_token',
+  'accesstoken',
+  'apikey',
+  'api_key',
+  'key',
+  'password',
+  'credentials',
+  'secret',
+  'refreshtoken',
+  'refresh_token',
+  'idtoken',
+  'id_token',
 ]);
 
 const SECRET_PATTERNS: RegExp[] = [

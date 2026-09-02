@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
-import { claudeCredentialsPath, codexAuthPath, opencodeAuthPath } from './paths.js';
+import {
+  claudeCredentialsPath,
+  codexAuthPath,
+  opencodeAuthPath,
+} from './paths.js';
 import { redactSecrets, safeErrorMessage } from './redact.js';
 
 /**
@@ -19,7 +23,8 @@ export async function getClaudeToken(): Promise<string | null> {
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, 'utf8');
       const json = JSON.parse(raw) as Record<string, unknown>;
-      const oauth = json['claudeAiOauth'] as Record<string, unknown> | undefined;
+      const oauth = json['claudeAiOauth'] as
+        Record<string, unknown> | undefined;
       const token = oauth?.['accessToken'];
       if (typeof token === 'string' && token.length > 0) {
         return token;
@@ -33,12 +38,19 @@ export async function getClaudeToken(): Promise<string | null> {
   if (process.platform === 'win32') {
     try {
       const ps = `(Get-StoredCredential -Target 'Claude Code-credentials' -AsCredential).GetNetworkCredential().Password`;
-      const result = execSync(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
-        timeout: 5000,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }).trim();
-      if (result && result.length > 0 && !result.startsWith('Get-StoredCredential')) {
+      const result = execSync(
+        `powershell -NoProfile -NonInteractive -Command "${ps}"`,
+        {
+          timeout: 5000,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        },
+      ).trim();
+      if (
+        result &&
+        result.length > 0 &&
+        !result.startsWith('Get-StoredCredential')
+      ) {
         return result;
       }
     } catch (err) {
@@ -57,7 +69,10 @@ export async function getClaudeToken(): Promise<string | null> {
  * Reads: ~/.codex/auth.json → tokens.access_token
  * Optionally decodes id_token JWT payload for chatgpt_account_id.
  */
-export async function getCodexToken(): Promise<{ accessToken: string; accountId?: string } | null> {
+export async function getCodexToken(): Promise<{
+  accessToken: string;
+  accountId?: string;
+} | null> {
   try {
     const filePath = codexAuthPath();
     if (!fs.existsSync(filePath)) return null;
@@ -68,7 +83,8 @@ export async function getCodexToken(): Promise<{ accessToken: string; accountId?
     if (!tokens) return null;
 
     const accessToken = tokens['access_token'];
-    if (typeof accessToken !== 'string' || accessToken.length === 0) return null;
+    if (typeof accessToken !== 'string' || accessToken.length === 0)
+      return null;
 
     let accountId: string | undefined;
     try {
@@ -76,8 +92,13 @@ export async function getCodexToken(): Promise<{ accessToken: string; accountId?
       if (typeof idToken === 'string') {
         const parts = idToken.split('.');
         if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8')) as Record<string, unknown>;
-          const id = payload['chatgpt_account_id'] ?? payload['account_id'] ?? payload['sub'];
+          const payload = JSON.parse(
+            Buffer.from(parts[1]!, 'base64url').toString('utf8'),
+          ) as Record<string, unknown>;
+          const id =
+            payload['chatgpt_account_id'] ??
+            payload['account_id'] ??
+            payload['sub'];
           if (typeof id === 'string') accountId = id;
         }
       }
@@ -99,15 +120,19 @@ export async function getOpenCodeGoToken(): Promise<string | null> {
   if (environmentKey) return environmentKey;
   try {
     const filePath = opencodeAuthPath();
-    if(!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath)) return null;
 
     const raw = fs.readFileSync(filePath, 'utf8');
     const json = JSON.parse(raw) as Record<string, unknown>;
 
-    for(const providerId of ['opencode-go', 'opencode']) {
+    for (const providerId of ['opencode-go', 'opencode']) {
       const entry = json[providerId] as Record<string, unknown> | undefined;
       const key = entry?.['key'];
-      if (entry?.['type'] === 'api' && typeof key ==='string' && key.length > 0){
+      if (
+        entry?.['type'] === 'api' &&
+        typeof key === 'string' &&
+        key.length > 0
+      ) {
         return key;
       }
     }

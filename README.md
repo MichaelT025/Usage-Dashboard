@@ -13,11 +13,11 @@
 
 **Supported providers:**
 
-| Provider     | Data source                             | What you see                              |
-| ------------ | --------------------------------------- | ----------------------------------------- |
-| Claude       | `api.anthropic.com/api/oauth/usage`     | 5h / weekly / per-model windows, credits  |
-| Codex        | `chatgpt.com/backend-api/wham/usage`    | Rate-limit windows, plan type, credits    |
-| OpenCode Go  | HTML scrape of `opencode.ai` Go console | Rolling / weekly / monthly, balance       |
+| Provider    | Data source                             | What you see                             |
+| ----------- | --------------------------------------- | ---------------------------------------- |
+| Claude      | `api.anthropic.com/api/oauth/usage`     | 5h / weekly / per-model windows, credits |
+| Codex       | `chatgpt.com/backend-api/wham/usage`    | Rate-limit windows, plan type, credits   |
+| OpenCode Go | HTML scrape of `opencode.ai` Go console | Rolling / weekly / monthly, balance      |
 
 Zen and OpenRouter stubs are wired but not yet implemented.
 
@@ -112,12 +112,12 @@ llm-usage --help          Show usage
 
 `--watch`/`--tui`, `--json`, and `--dash` are mutually exclusive. Combining them exits with an error.
 
-| Option       | Description                                                                 |
-| ------------ | --------------------------------------------------------------------------- |
-| `--port N`   | Server port (default: `7878`) — only applies with `--dash`                  |
-| `--no-open`  | Don't open the browser automatically — only applies with `--dash`           |
-| `--watch`, `--tui` | Live TUI — requires an interactive terminal (TTY)                    |
-| `--json`     | Machine-readable JSON output — color disabled, always exits 0               |
+| Option             | Description                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| `--port N`         | Server port (default: `7878`) — only applies with `--dash`        |
+| `--no-open`        | Don't open the browser automatically — only applies with `--dash` |
+| `--watch`, `--tui` | Live TUI — requires an interactive terminal (TTY)                 |
+| `--json`           | Machine-readable JSON output — color disabled, always exits 0     |
 
 Color is auto-disabled when output is piped or the `NO_COLOR` environment variable is set.
 
@@ -127,14 +127,14 @@ Color is auto-disabled when output is piped or the `NO_COLOR` environment variab
 
 Config lives at `~/.llm-usage/config.json`. Fields:
 
-| Key                    | Type   | Default | Description                                            |
-| ---------------------- | ------ | ------- | ------------------------------------------------------ |
-| `refreshIntervalSec`   | number | `180`   | Seconds between auto-refresh polls (min: 30)            |
-| `port`                 | number | `7878`  | HTTP server port                                        |
-| `opencodeWorkspaceId`  | string | —       | Your OpenCode workspace ID                              |
-| `opencodeAuthCookie`   | string | —       | Session cookie from `opencode.ai`                       |
-| `claudeCredentialsPathOverride` | string | — | Override path to Claude credentials file       |
-| `codexAuthPathOverride` | string | —       | Override path to Codex credentials store                |
+| Key                             | Type   | Default | Description                                  |
+| ------------------------------- | ------ | ------- | -------------------------------------------- |
+| `refreshIntervalSec`            | number | `180`   | Seconds between auto-refresh polls (min: 30) |
+| `port`                          | number | `7878`  | HTTP server port                             |
+| `opencodeWorkspaceId`           | string | —       | Your OpenCode workspace ID                   |
+| `opencodeAuthCookie`            | string | —       | Session cookie from `opencode.ai`            |
+| `claudeCredentialsPathOverride` | string | —       | Override path to Claude credentials file     |
+| `codexAuthPathOverride`         | string | —       | Override path to Codex credentials store     |
 
 **Do not commit this file** — it may contain credentials. It is stored with `0600` permissions on POSIX systems.
 
@@ -146,13 +146,13 @@ Config lives at `~/.llm-usage/config.json`. Fields:
 
 All endpoints are local-only (`http://127.0.0.1:7878`).
 
-| Method | Path           | Description                                    |
-| ------ | -------------- | ---------------------------------------------- |
-| `GET`  | `/`            | Dashboard UI                                   |
-| `GET`  | `/api/status`  | Current usage snapshot for all providers       |
-| `POST` | `/api/refresh` | Force an out-of-cycle poll                     |
-| `GET`  | `/api/config`  | Configuration status (never returns secrets)   |
-| `POST` | `/api/config`  | Update configuration (same-origin only)        |
+| Method | Path           | Description                                  |
+| ------ | -------------- | -------------------------------------------- |
+| `GET`  | `/`            | Dashboard UI                                 |
+| `GET`  | `/api/status`  | Current usage snapshot for all providers     |
+| `POST` | `/api/refresh` | Force an out-of-cycle poll                   |
+| `GET`  | `/api/config`  | Configuration status (never returns secrets) |
+| `POST` | `/api/config`  | Update configuration (same-origin only)      |
 
 The `POST /api/config` endpoint is guarded against cross-origin requests and rejects payloads larger than 8 KB.
 

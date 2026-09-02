@@ -11,7 +11,9 @@ type ProbeResult = 'ok' | 'COOKIE_EXPIRED' | 'error';
  * Prompts for OpenCode Go config. Probes Claude + Codex tokens automatically.
  * On confirm: saves via saveConfig(). NEVER echoes the cookie or tokens.
  */
-export async function runSetupWizard(opts: { check?: boolean; noValidate?: boolean } = {}): Promise<void> {
+export async function runSetupWizard(
+  opts: { check?: boolean; noValidate?: boolean } = {},
+): Promise<void> {
   const config = loadConfig();
 
   if (opts.check) {
@@ -20,23 +22,32 @@ export async function runSetupWizard(opts: { check?: boolean; noValidate?: boole
     process.exit(allOk ? 0 : 1);
   }
 
-  const pipedAnswers = process.stdin.isTTY ? null : fs.readFileSync(0, 'utf8').split(/\r?\n/);
+  const pipedAnswers = process.stdin.isTTY
+    ? null
+    : fs.readFileSync(0, 'utf8').split(/\r?\n/);
   let pipedAnswerIndex = 0;
   let rl: readline.Interface | null = pipedAnswers
     ? null
-    : readline.createInterface({ input: process.stdin, output: process.stdout });
+    : readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
   const question = (prompt: string): Promise<string> => {
     if (pipedAnswers) {
       process.stdout.write(prompt);
       return Promise.resolve(pipedAnswers[pipedAnswerIndex++] ?? '');
     }
     if (!rl) throw new Error('readline interface is closed');
-    return new Promise(resolve => rl!.question(prompt, resolve));
+    return new Promise((resolve) => rl!.question(prompt, resolve));
   };
 
   console.log('\n🔧  llm-usage setup\n');
-  console.log('Claude and Codex tokens are read automatically from your local login files.');
-  console.log('Only OpenCode Go requires manual configuration (workspace ID + auth cookie).\n');
+  console.log(
+    'Claude and Codex tokens are read automatically from your local login files.',
+  );
+  console.log(
+    'Only OpenCode Go requires manual configuration (workspace ID + auth cookie).\n',
+  );
 
   await printProviderStatus(config);
   console.log('');
@@ -54,15 +65,26 @@ export async function runSetupWizard(opts: { check?: boolean; noValidate?: boole
       ? 'OpenCode auth cookie [current: configured, press Enter to keep]: '
       : 'OpenCode auth cookie (copy from opencode.ai browser cookies → auth): ';
 
-    const usedRawCookiePrompt = !pipedAnswers && process.stdin.isTTY && typeof process.stdin.setRawMode === 'function';
-    const authCookie = pipedAnswers ? await question(cookiePrompt) : await questionMasked(rl, cookiePrompt);
+    const usedRawCookiePrompt =
+      !pipedAnswers &&
+      process.stdin.isTTY &&
+      typeof process.stdin.setRawMode === 'function';
+    const authCookie = pipedAnswers
+      ? await question(cookiePrompt)
+      : await questionMasked(rl, cookiePrompt);
     if (usedRawCookiePrompt) {
-      rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
     }
     const finalCookie = authCookie.trim() || config.opencodeAuthCookie || '';
 
-    const intervalInput = await question(`Auto-refresh interval in seconds [${config.refreshIntervalSec}]: `);
-    const intervalSec = parseInt(intervalInput.trim(), 10) || config.refreshIntervalSec;
+    const intervalInput = await question(
+      `Auto-refresh interval in seconds [${config.refreshIntervalSec}]: `,
+    );
+    const intervalSec =
+      parseInt(intervalInput.trim(), 10) || config.refreshIntervalSec;
 
     rl?.close();
     rl = null;
@@ -94,7 +116,9 @@ export async function runSetupWizard(opts: { check?: boolean; noValidate?: boole
       } else if (result === 'ok') {
         console.log('  ✓  OpenCode Go connection verified');
       } else {
-        console.log('  ⚠  Could not reach OpenCode Go. Saving local configuration only.');
+        console.log(
+          '  ⚠  Could not reach OpenCode Go. Saving local configuration only.',
+        );
       }
     }
 
@@ -118,9 +142,15 @@ async function checkAllProviders(config: LoadedConfig): Promise<boolean> {
   const hasGo = !!(config.opencodeWorkspaceId && config.opencodeAuthCookie);
 
   const rows = [
-    ['Claude', claudeToken ? '✓ token found' : '✗ not found — run `claude` to login'],
+    [
+      'Claude',
+      claudeToken ? '✓ token found' : '✗ not found — run `claude` to login',
+    ],
     ['Codex', codexToken ? '✓ token found' : '✗ not found — run `codex login`'],
-    ['OpenCode Go', hasGo ? '✓ configured' : '✗ not configured — run `llm-usage setup`'],
+    [
+      'OpenCode Go',
+      hasGo ? '✓ configured' : '✗ not configured — run `llm-usage setup`',
+    ],
   ] as const;
 
   for (const [name, status] of rows) {
@@ -134,9 +164,15 @@ async function printProviderStatus(config: LoadedConfig): Promise<void> {
   const claudeToken = await findClaudeToken();
   const codexToken = await findCodexToken();
   console.log('Current status:');
-  console.log(`  Claude         ${claudeToken ? '✓ configured' : '✗ not found'}`);
-  console.log(`  Codex          ${codexToken ? '✓ configured' : '✗ not found'}`);
-  console.log(`  OpenCode Go    ${config.opencodeWorkspaceId ? '✓ workspace set' : '✗ not configured'} / ${config.opencodeAuthCookie ? '✓ cookie set' : '✗ no cookie'}`);
+  console.log(
+    `  Claude         ${claudeToken ? '✓ configured' : '✗ not found'}`,
+  );
+  console.log(
+    `  Codex          ${codexToken ? '✓ configured' : '✗ not found'}`,
+  );
+  console.log(
+    `  OpenCode Go    ${config.opencodeWorkspaceId ? '✓ workspace set' : '✗ not configured'} / ${config.opencodeAuthCookie ? '✓ cookie set' : '✗ no cookie'}`,
+  );
 }
 
 async function findClaudeToken(): Promise<string | null> {
@@ -147,7 +183,9 @@ async function findClaudeToken(): Promise<string | null> {
   }
 }
 
-async function findCodexToken(): Promise<Awaited<ReturnType<typeof getCodexToken>>> {
+async function findCodexToken(): Promise<
+  Awaited<ReturnType<typeof getCodexToken>>
+> {
   try {
     return await getCodexToken();
   } catch {
@@ -155,7 +193,10 @@ async function findCodexToken(): Promise<Awaited<ReturnType<typeof getCodexToken
   }
 }
 
-async function probeGoAdapter(workspaceId: string, cookie: string): Promise<ProbeResult> {
+async function probeGoAdapter(
+  workspaceId: string,
+  cookie: string,
+): Promise<ProbeResult> {
   try {
     const url = `https://opencode.ai/workspace/${encodeURIComponent(workspaceId)}/go`;
     const res = await fetch(url, {
@@ -167,19 +208,26 @@ async function probeGoAdapter(workspaceId: string, cookie: string): Promise<Prob
       redirect: 'follow',
     });
     const html = await res.text();
-    if (!html.includes('rollingUsage') && !html.includes('weeklyUsage')) return 'COOKIE_EXPIRED';
+    if (!html.includes('rollingUsage') && !html.includes('weeklyUsage'))
+      return 'COOKIE_EXPIRED';
     return 'ok';
   } catch {
     return 'error';
   }
 }
 
-async function questionMasked(rl: readline.Interface | null, prompt: string): Promise<string> {
+async function questionMasked(
+  rl: readline.Interface | null,
+  prompt: string,
+): Promise<string> {
   if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== 'function') {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       if (!rl) {
-        const fallback = readline.createInterface({ input: process.stdin, output: process.stdout });
-        fallback.question(prompt, answer => {
+        const fallback = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        fallback.question(prompt, (answer) => {
           fallback.close();
           resolve(answer);
         });
@@ -191,7 +239,7 @@ async function questionMasked(rl: readline.Interface | null, prompt: string): Pr
 
   rl?.close();
 
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     process.stdout.write(prompt);
     process.stdin.setRawMode(true);
     let input = '';
@@ -232,9 +280,12 @@ async function questionMasked(rl: readline.Interface | null, prompt: string): Pr
 }
 
 function askLine(prompt: string): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => {
-    rl.question(prompt, answer => {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) => {
+    rl.question(prompt, (answer) => {
       rl.close();
       resolve(answer);
     });

@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { Poller } from './poller.js';
 import type { IProviderAdapter, ProviderId, UsageData } from './types.js';
 
-function usage(providerId: ProviderId, displayName: string, state: UsageData['state'] = 'ok'): UsageData {
+function usage(
+  providerId: ProviderId,
+  displayName: string,
+  state: UsageData['state'] = 'ok',
+): UsageData {
   return {
     providerId,
     displayName,
@@ -14,7 +18,10 @@ function usage(providerId: ProviderId, displayName: string, state: UsageData['st
   };
 }
 
-function rateLimitedUsage(providerId: ProviderId, displayName: string): UsageData {
+function rateLimitedUsage(
+  providerId: ProviderId,
+  displayName: string,
+): UsageData {
   return {
     providerId,
     displayName,
@@ -44,8 +51,17 @@ describe('Poller', () => {
     let resolveFetch: (value: UsageData) => void = () => {
       throw new Error('fetch resolver was not initialized');
     };
-    const fetch = vi.fn(() => new Promise<UsageData>(resolve => { resolveFetch = resolve; }));
-    const adapter: IProviderAdapter = { id: 'claude', displayName: 'Claude', fetch };
+    const fetch = vi.fn(
+      () =>
+        new Promise<UsageData>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const adapter: IProviderAdapter = {
+      id: 'claude',
+      displayName: 'Claude',
+      fetch,
+    };
     const poller = new Poller({ adapters: [adapter], intervalSec: 180 });
 
     const first = poller.refreshNow();
@@ -72,7 +88,11 @@ describe('Poller', () => {
 
   it('backs off RATE_LIMITED providers for two cycles before retrying', async () => {
     const fetch = vi.fn(async () => rateLimitedUsage('codex', 'Codex'));
-    const adapter: IProviderAdapter = { id: 'codex', displayName: 'Codex', fetch };
+    const adapter: IProviderAdapter = {
+      id: 'codex',
+      displayName: 'Codex',
+      fetch,
+    };
     const poller = new Poller({ adapters: [adapter], intervalSec: 180 });
 
     const cycle1 = await poller.refreshNow();

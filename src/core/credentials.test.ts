@@ -27,18 +27,22 @@ function base64UrlJson(value: unknown): string {
 }
 
 beforeEach(() => {
-  tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-dashboard-credentials-'));
+  tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'usage-dashboard-credentials-'),
+  );
   vi.restoreAllMocks();
 });
 
 afterEach(() => {
-  if (originalClaudeConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  if (originalClaudeConfigDir === undefined)
+    delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
 
   if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
   else process.env.CODEX_HOME = originalCodexHome;
 
-  if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+  if (originalPlatform)
+    Object.defineProperty(process, 'platform', originalPlatform);
   vi.restoreAllMocks();
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -71,7 +75,9 @@ describe('getClaudeToken', () => {
     );
     mockPlatform('linux');
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
     await expect(getClaudeToken()).resolves.toBeNull();
 
