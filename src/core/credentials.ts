@@ -115,6 +115,10 @@ export async function getCodexToken(): Promise<{
   }
 }
 
+/**
+ * Resolve an API key for the OpenCode Go usage endpoint.
+ * Priority: OPENCODE_API_KEY, then opencode-go/opencode entries in the OpenCode CLI auth store.
+ */
 export async function getOpenCodeGoToken(): Promise<string | null> {
   const environmentKey = process.env['OPENCODE_API_KEY']?.trim();
   if (environmentKey) return environmentKey;

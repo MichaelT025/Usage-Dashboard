@@ -1,8 +1,8 @@
 /**
  * Phase-2 stub: OpenCode Zen provider.
  *
- * Future data source: HTML scrape of opencode.ai/workspace/{id}/go (same as Go panel)
- * OR per-response `cost` field accumulation.
+ * Zen is pay-as-you-go. The Go usage endpoint reports Go subscription quotas only;
+ * it does not expose Zen spending or the workspace credit balance.
  * Credits API endpoint: none (server-side only, no public REST API).
  *
  * NOT in the active Phase-1 aggregator list.

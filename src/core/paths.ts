@@ -43,7 +43,7 @@ export function codexAuthPath(): string {
   return path.join(base, 'auth.json');
 }
 
-/** Path to the Opencode CLI auth store */
+/** Path to the OpenCode CLI auth store. */
 export function opencodeAuthPath(): string {
   const override = process.env['OPENCODE_AUTH_PATH'];
   if (override) return path.resolve(override);
