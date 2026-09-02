@@ -192,7 +192,7 @@ src/
 └── smoke.test.ts       Integration smoke test
 public/
 ├── index.html          Dashboard shell
-├── app.js              Frontend logic — fetch, render, settings modal
+├── app.js              Frontend logic — fetch, render, settings drawer
 └── styles.css          Dashboard styles
 ```
 
