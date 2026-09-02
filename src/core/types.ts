@@ -29,6 +29,7 @@ export type ProviderErrorCode =
   | 'NETWORK'          // DNS/timeout/connection refused
   | 'PARSE'            // Unexpected response shape
   | 'NOT_CONFIGURED'   // Missing required credential in config
+  | 'NOT_ENTITLED'     // Credential is valid, but required subscription is absent
   | 'UNKNOWN';         // Catch-all
 
 /** Structured error attached to unavailable/unconfigured UsageData */
