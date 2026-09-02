@@ -25,7 +25,9 @@ describe('server refresh flow', () => {
   });
 
   it('POST /api/refresh triggers fresh poll and returns updated data', async () => {
-    const res = await fetch('http://127.0.0.1:17879/api/refresh', { method: 'POST' });
+    const res = await fetch('http://127.0.0.1:17879/api/refresh', {
+      method: 'POST',
+    });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body.providers)).toBe(true);
@@ -36,7 +38,12 @@ describe('server refresh flow', () => {
       expect(typeof p.displayName).toBe('string');
       expect(typeof p.state).toBe('string');
       expect(typeof p.fetchedAt).toBe('string');
-      expect(['ok', 'unavailable', 'unconfigured', 'not_implemented']).toContain(p.state);
+      expect([
+        'ok',
+        'unavailable',
+        'unconfigured',
+        'not_implemented',
+      ]).toContain(p.state);
     }
   });
 
@@ -46,8 +53,7 @@ describe('server refresh flow', () => {
     const body = await res.json();
     expect(typeof body.claudeTokenFound).toBe('boolean');
     expect(typeof body.codexTokenFound).toBe('boolean');
-    expect(typeof body.opencodeWorkspaceIdSet).toBe('boolean');
-    expect(typeof body.opencodeAuthCookieSet).toBe('boolean');
+    expect(typeof body.openCodeGoTokenFound).toBe('boolean');
     expect(typeof body.refreshIntervalSec).toBe('number');
     // Never returns secret values
     expect(body).not.toHaveProperty('opencodeAuthCookie');
@@ -57,7 +63,10 @@ describe('server refresh flow', () => {
   it('POST /api/config rejects cross-origin requests', async () => {
     const res = await fetch('http://127.0.0.1:17879/api/config', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: 'https://evil.com' },
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://evil.com',
+      },
       body: JSON.stringify({ refreshIntervalSec: 300 }),
     });
     expect(res.status).toBe(403);

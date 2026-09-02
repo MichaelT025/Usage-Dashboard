@@ -9,15 +9,15 @@
 
 ## Overview
 
-`llm-usage` polls usage APIs and scrapes provider pages to give you a single-pane view of your LLM subscription limits. By default it prints a snapshot to your terminal and exits. Nothing leaves your machine, and credentials are never logged or transmitted off-device.
+`llm-usage` polls provider usage APIs to give you a single-pane view of your LLM subscription limits. By default it prints a snapshot to your terminal and exits. Nothing leaves your machine except authenticated requests to the configured providers, and credentials are never logged or included in dashboard responses.
 
 **Supported providers:**
 
-| Provider     | Data source                             | What you see                              |
-| ------------ | --------------------------------------- | ----------------------------------------- |
-| Claude       | `api.anthropic.com/api/oauth/usage`     | 5h / weekly / per-model windows, credits  |
-| Codex        | `chatgpt.com/backend-api/wham/usage`    | Rate-limit windows, plan type, credits    |
-| OpenCode Go  | HTML scrape of `opencode.ai` Go console | Rolling / weekly / monthly, balance       |
+| Provider    | Data source                          | What you see                             |
+| ----------- | ------------------------------------ | ---------------------------------------- |
+| Claude      | `api.anthropic.com/api/oauth/usage`  | 5h / weekly / per-model windows, credits |
+| Codex       | `chatgpt.com/backend-api/wham/usage` | Rate-limit windows, plan type, credits   |
+| OpenCode Go | `opencode.ai/zen/go/v1/usage`        | Rolling / weekly / monthly quotas        |
 
 Zen and OpenRouter stubs are wired but not yet implemented.
 
@@ -86,14 +86,15 @@ codex login
 
 ### OpenCode Go
 
-OpenCode Go requires manual configuration — it has no public API and authenticates via a session cookie.
+OpenCode Go usage is read from its official usage API. The API key is discovered automatically in this order:
 
-1. Navigate to `https://opencode.ai/workspace/{ID}/go` in your browser.
-2. Open DevTools → Application → Cookies → `opencode.ai`.
-3. Copy the value of the `auth` cookie.
-4. Run `llm-usage setup` and paste both your workspace ID and the cookie value.
+1. `OPENCODE_API_KEY`
+2. The `opencode-go` entry in `~/.local/share/opencode/auth.json`
+3. The `opencode` entry in the same auth file, because Zen and Go can share a workspace key
 
-The wizard masks input so the cookie value is never echoed to the terminal.
+To configure the key through OpenCode, run `/connect` in the OpenCode TUI, select **OpenCode Go**, and paste the key from the OpenCode console. Set `OPENCODE_AUTH_PATH` only when the auth file is stored at a nonstandard location.
+
+The endpoint reports Go subscription quotas only. It does not report ordinary Zen pay-as-you-go spending or the Zen credit balance.
 
 ---
 
@@ -106,18 +107,17 @@ llm-usage --json          Print a machine-readable JSON snapshot and exit
 llm-usage --dash          Launch the local web dashboard
 llm-usage setup           Interactive setup wizard
 llm-usage setup --check   Check provider configuration status
-llm-usage setup --no-validate  Skip live credential validation
 llm-usage --help          Show usage
 ```
 
 `--watch`/`--tui`, `--json`, and `--dash` are mutually exclusive. Combining them exits with an error.
 
-| Option       | Description                                                                 |
-| ------------ | --------------------------------------------------------------------------- |
-| `--port N`   | Server port (default: `7878`) — only applies with `--dash`                  |
-| `--no-open`  | Don't open the browser automatically — only applies with `--dash`           |
-| `--watch`, `--tui` | Live TUI — requires an interactive terminal (TTY)                    |
-| `--json`     | Machine-readable JSON output — color disabled, always exits 0               |
+| Option             | Description                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| `--port N`         | Server port (default: `7878`) — only applies with `--dash`        |
+| `--no-open`        | Don't open the browser automatically — only applies with `--dash` |
+| `--watch`, `--tui` | Live TUI — requires an interactive terminal (TTY)                 |
+| `--json`           | Machine-readable JSON output — color disabled, always exits 0     |
 
 Color is auto-disabled when output is piped or the `NO_COLOR` environment variable is set.
 
@@ -125,18 +125,25 @@ Color is auto-disabled when output is piped or the `NO_COLOR` environment variab
 
 ## Configuration
 
-Config lives at `~/.llm-usage/config.json`. Fields:
+Application settings live at `~/.llm-usage/config.json`:
 
-| Key                    | Type   | Default | Description                                            |
-| ---------------------- | ------ | ------- | ------------------------------------------------------ |
-| `refreshIntervalSec`   | number | `180`   | Seconds between auto-refresh polls (min: 30)            |
-| `port`                 | number | `7878`  | HTTP server port                                        |
-| `opencodeWorkspaceId`  | string | —       | Your OpenCode workspace ID                              |
-| `opencodeAuthCookie`   | string | —       | Session cookie from `opencode.ai`                       |
-| `claudeCredentialsPathOverride` | string | — | Override path to Claude credentials file       |
-| `codexAuthPathOverride` | string | —       | Override path to Codex credentials store                |
+| Key                             | Type   | Default | Description                                  |
+| ------------------------------- | ------ | ------- | -------------------------------------------- |
+| `refreshIntervalSec`            | number | `180`   | Seconds between auto-refresh polls (min: 30) |
+| `port`                          | number | `7878`  | HTTP server port                             |
+| `claudeCredentialsPathOverride` | string | —       | Override path to Claude credentials file     |
+| `codexAuthPathOverride`         | string | —       | Override path to Codex credentials store     |
 
-**Do not commit this file** — it may contain credentials. It is stored with `0600` permissions on POSIX systems.
+OpenCode workspace IDs and browser cookies are no longer required. Existing `opencodeWorkspaceId` and `opencodeAuthCookie` properties are legacy scraper settings and can be removed from the file.
+
+OpenCode credential discovery can be adjusted with these environment variables:
+
+| Variable             | Description                                           |
+| -------------------- | ----------------------------------------------------- |
+| `OPENCODE_API_KEY`   | OpenCode API key; takes precedence over the auth file |
+| `OPENCODE_AUTH_PATH` | Override path to the OpenCode CLI `auth.json` file    |
+
+**Do not commit credential files or API keys.** Configuration files are written with `0600` permissions on POSIX systems.
 
 ---
 
@@ -146,13 +153,13 @@ Config lives at `~/.llm-usage/config.json`. Fields:
 
 All endpoints are local-only (`http://127.0.0.1:7878`).
 
-| Method | Path           | Description                                    |
-| ------ | -------------- | ---------------------------------------------- |
-| `GET`  | `/`            | Dashboard UI                                   |
-| `GET`  | `/api/status`  | Current usage snapshot for all providers       |
-| `POST` | `/api/refresh` | Force an out-of-cycle poll                     |
-| `GET`  | `/api/config`  | Configuration status (never returns secrets)   |
-| `POST` | `/api/config`  | Update configuration (same-origin only)        |
+| Method | Path           | Description                                  |
+| ------ | -------------- | -------------------------------------------- |
+| `GET`  | `/`            | Dashboard UI                                 |
+| `GET`  | `/api/status`  | Current usage snapshot for all providers     |
+| `POST` | `/api/refresh` | Force an out-of-cycle poll                   |
+| `GET`  | `/api/config`  | Configuration status (never returns secrets) |
+| `POST` | `/api/config`  | Update configuration (same-origin only)      |
 
 The `POST /api/config` endpoint is guarded against cross-origin requests and rejects payloads larger than 8 KB.
 
@@ -164,28 +171,28 @@ The `POST /api/config` endpoint is guarded against cross-origin requests and rej
 src/
 ├── cli.ts              CLI entrypoint — flag parsing, terminal/JSON/TUI/web dispatch
 ├── server.ts           HTTP server — routing, static file serving, config CRUD
-├── setup.ts            Interactive setup wizard with masked credential input
+├── setup.ts            Interactive setup and provider credential checks
 ├── render.ts           Pure ANSI terminal formatter functions (bar, colors, frame builder)
 ├── tui.ts              Live alt-screen TUI loop (Poller-driven, 1s countdown re-render, key/resize/signal handling)
 ├── core/
 │   ├── types.ts        Pure data contracts (UsageData, QuotaWindow, StatusResponse)
 │   ├── config.ts       Load / validate / save config (~/.llm-usage/config.json)
-│   ├── credentials.ts  Read Claude & Codex tokens from their CLI auth stores
+│   ├── credentials.ts  Read Claude, Codex, and OpenCode credentials from local auth stores
 │   ├── poller.ts       Polling service — interval, backoff, deduplication
 │   ├── aggregator.ts   Parallel fetch across adapters, merge results
 │   ├── redact.ts       Strip secrets from error messages and response bodies
-│   └── paths.ts        Filesystem paths for config dir / file
+│   └── paths.ts        Filesystem paths for config and credential stores
 ├── providers/
 │   ├── claude.ts       Anthropic OAuth usage API adapter
 │   ├── codex.ts        ChatGPT backend usage API adapter
-│   ├── opencode-go.ts  HTML-scraping adapter for OpenCode Go console
+│   ├── opencode-go.ts  Official OpenCode Go usage API adapter
 │   ├── openrouter.ts   Stub (Phase 2)
 │   ├── zen.ts          Stub (Phase 2)
 │   └── stubs.test.ts   Shared test fixtures
 └── smoke.test.ts       Integration smoke test
 public/
 ├── index.html          Dashboard shell
-├── app.js              Frontend logic — fetch, render, settings modal
+├── app.js              Frontend logic — fetch, render, settings drawer
 └── styles.css          Dashboard styles
 ```
 

@@ -38,7 +38,11 @@ const BAR_MAX = 50;
  * pct >= 100 → RED (critical), pct >= 80 → YELLOW (warning), else GREEN.
  * Mirrors app.js renderWindow color logic.
  */
-export function bar(usedPercent: number, width: number, color: boolean): string {
+export function bar(
+  usedPercent: number,
+  width: number,
+  color: boolean,
+): string {
   const pct = Math.min(100, Math.max(0, usedPercent));
   const filled = Math.round((pct / 100) * width);
   const empty = width - filled;
@@ -83,7 +87,8 @@ export function renderWindowRow(win: QuotaWindow, opts: RenderOpts): string {
   const pctStr = `${pct}% used`.padStart(8); // e.g. "  42% used"
 
   const delta = new Date(win.resetsAt).getTime() - Date.now();
-  const countdown = delta <= 0 ? 'resetting now' : `Resets in ${formatDuration(delta)}`;
+  const countdown =
+    delta <= 0 ? 'resetting now' : `Resets in ${formatDuration(delta)}`;
 
   const colorCode = pct >= 100 ? RED : pct >= 80 ? YELLOW : GREEN;
   const coloredBar = bar(pct, BAR_MAX, opts.color);
@@ -120,13 +125,17 @@ export function renderProviderBlock(p: UsageData, opts: RenderOpts): string {
     // Credits (mirrors app.js renderCredits, lines 107-112)
     if (p.credits) {
       const parts: string[] = [];
-      if (p.credits.balanceUsd != null) parts.push(`Balance: $${p.credits.balanceUsd.toFixed(2)}`);
-      if (p.credits.valueUsd != null) parts.push(`Used: $${p.credits.valueUsd.toFixed(2)}`);
-      if (parts.length) lines.push(`  ${p.credits.label}: ${parts.join(' · ')}`);
+      if (p.credits.balanceUsd != null)
+        parts.push(`Balance: $${p.credits.balanceUsd.toFixed(2)}`);
+      if (p.credits.valueUsd != null)
+        parts.push(`Used: $${p.credits.valueUsd.toFixed(2)}`);
+      if (parts.length)
+        lines.push(`  ${p.credits.label}: ${parts.join(' · ')}`);
     }
   } else {
     // Error / unconfigured state
-    const stateLabel = p.state === 'unconfigured' ? 'Not Configured' : 'Unavailable';
+    const stateLabel =
+      p.state === 'unconfigured' ? 'Not Configured' : 'Unavailable';
     lines.push(`  ${paint(stateLabel, BOLD, opts.color)}`);
     if (p.error?.code) lines.push(`  ${paint(p.error.code, DIM, opts.color)}`);
     if (p.error?.hint) lines.push(`  ${p.error.hint}`);

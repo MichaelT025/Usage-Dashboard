@@ -1,46 +1,96 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadConfig } from '../core/config.js';
-import { OpenCodeGoAdapter } from './opencode-go.js';
+import { getOpenCodeGoToken } from '../core/credentials.js';
+import { OpenCodeGoAdapter, parseGoUsage } from './opencode-go.js';
 
-vi.mock('../core/config.js', () => ({
-  loadConfig: vi.fn(),
+vi.mock('../core/credentials.js', () => ({
+  getOpenCodeGoToken: vi.fn(),
 }));
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, '../..');
-const fixtureDir = path.join(__dirname, 'fixtures');
-const evidenceDir = path.join(projectRoot, '.omo', 'evidence');
+const TOKEN = 'sk-OPENCODE-TEST';
+const happyResponse = {
+  usage: {
+    rolling: {
+      status: 'ok',
+      percent: 17,
+      resetsAt: '2026-09-02T12:00:00.000Z',
+    },
+    weekly: {
+      status: 'ok',
+      percent: 42,
+      resetsAt: '2026-09-07T00:00:00.000Z',
+    },
+    monthly: {
+      status: 'ok',
+      percent: 55,
+      resetsAt: '2026-10-01T00:00:00.000Z',
+    },
+  },
+};
 
-const happyHtml = readFixture('opencode-go-happy.html');
-const loginHtml = readFixture('opencode-go-login.html');
-const malformedHtml = readFixture('opencode-go-malformed.html');
-
-function readFixture(name: string): string {
-  return fs.readFileSync(path.join(fixtureDir, name), 'utf8');
-}
-
-function writeEvidence(name: string, value: unknown): void {
-  fs.mkdirSync(evidenceDir, { recursive: true });
-  fs.writeFileSync(path.join(evidenceDir, name), JSON.stringify(value, null, 2) + '\n', 'utf8');
-}
-
-function configured(): ReturnType<typeof loadConfig> {
-  return {
-    opencodeWorkspaceId: 'wrk_test',
-    opencodeAuthCookie: 'Fe26.2**TESTCOOKIE',
-    refreshIntervalSec: 180,
-    port: 7878,
-  };
-}
-
-function stubFetchText(html: string, status = 200): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn().mockResolvedValue(new Response(html, { status }));
+function stubJson(body: unknown, status = 200): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
+
+function stubText(body: string, status = 200): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(body, { status }));
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+describe('parseGoUsage', () => {
+  it('maps all official usage windows', () => {
+    expect(parseGoUsage(happyResponse)?.windows).toEqual([
+      {
+        label: '5h',
+        windowSeconds: 18_000,
+        usedPercent: 17,
+        resetsAt: '2026-09-02T12:00:00.000Z',
+      },
+      {
+        label: 'Weekly',
+        windowSeconds: 604_800,
+        usedPercent: 42,
+        resetsAt: '2026-09-07T00:00:00.000Z',
+      },
+      {
+        label: 'Monthly',
+        windowSeconds: 2_592_000,
+        usedPercent: 55,
+        resetsAt: '2026-10-01T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('rejects missing, invalid, and out-of-range window fields', () => {
+    expect(parseGoUsage({})).toBeNull();
+    expect(parseGoUsage({ usage: { rolling: {} } })).toBeNull();
+    expect(
+      parseGoUsage({
+        ...happyResponse,
+        usage: {
+          ...happyResponse.usage,
+          rolling: { ...happyResponse.usage.rolling, percent: 101 },
+        },
+      }),
+    ).toBeNull();
+    expect(
+      parseGoUsage({
+        ...happyResponse,
+        usage: {
+          ...happyResponse.usage,
+          weekly: { ...happyResponse.usage.weekly, resetsAt: 'not-a-date' },
+        },
+      }),
+    ).toBeNull();
+  });
+});
 
 describe('OpenCodeGoAdapter', () => {
   afterEach(() => {
@@ -48,62 +98,112 @@ describe('OpenCodeGoAdapter', () => {
     vi.clearAllMocks();
   });
 
-  it('parses Go hydration usage from the web console HTML', async () => {
-    vi.mocked(loadConfig).mockReturnValue(configured());
-    stubFetchText(happyHtml);
+  it('fetches and maps the official Go usage API', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+    const fetchMock = stubJson(happyResponse);
 
     const result = await new OpenCodeGoAdapter().fetch();
 
     expect(result.state).toBe('ok');
     expect(result.windows).toHaveLength(3);
-    expect(result.windows.map((window) => [window.label, window.usedPercent])).toEqual([
-      ['5h', 17],
-      ['Weekly', 42],
-      ['Monthly', 55],
+    expect(result.windows.map((window) => window.usedPercent)).toEqual([
+      17, 42, 55,
     ]);
-    expect(result.credits?.balanceUsd).toBeCloseTo(1.23456789, 8);
-    writeEvidence('task-9-go-happy.txt', result);
+    expect(result.credits).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://opencode.ai/zen/go/v1/usage',
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          Accept: 'application/json',
+          'User-Agent': 'llm-usage',
+        },
+        redirect: 'error',
+      },
+    );
   });
 
-  it('detects an expired cookie without leaking the configured cookie', async () => {
-    vi.mocked(loadConfig).mockReturnValue(configured());
-    stubFetchText(loginHtml);
-
-    const result = await new OpenCodeGoAdapter().fetch();
-
-    expect(result.state).toBe('unavailable');
-    expect(result.error?.code).toBe('COOKIE_EXPIRED');
-    expect(JSON.stringify(result)).not.toContain('Fe26.2**TESTCOOKIE');
-    writeEvidence('task-9-go-expired.txt', result);
-  });
-
-  it('returns PARSE for malformed hydrated usage HTML', async () => {
-    vi.mocked(loadConfig).mockReturnValue(configured());
-    stubFetchText(malformedHtml);
-
-    const result = await new OpenCodeGoAdapter().fetch();
-
-    expect(result.state).toBe('unavailable');
-    expect(result.error?.code).toBe('PARSE');
-  });
-
-  it('returns unconfigured when workspace ID or auth cookie is missing', async () => {
-    vi.mocked(loadConfig).mockReturnValue({ refreshIntervalSec: 180, port: 7878 });
+  it('returns unconfigured when no API key is found', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(null);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
 
     const result = await new OpenCodeGoAdapter().fetch();
 
     expect(result.state).toBe('unconfigured');
     expect(result.error?.code).toBe('NOT_CONFIGURED');
-    expect(result.error?.hint).toContain('llm-usage setup');
-    writeEvidence('task-9-go-unconfigured.txt', result);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('re-fetches fresh HTML on each call and keeps no adapter state', async () => {
-    vi.mocked(loadConfig).mockReturnValue(configured());
-    const secondHtml = happyHtml.replace('usagePercent:17', 'usagePercent:88');
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(happyHtml, { status: 200 }))
-      .mockResolvedValueOnce(new Response(secondHtml, { status: 200 }));
+  it('maps 401 to AUTH_EXPIRED without leaking the API key', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+    stubJson(
+      { type: 'error', error: { type: 'AuthError', message: 'Unauthorized' } },
+      401,
+    );
+
+    const result = await new OpenCodeGoAdapter().fetch();
+
+    expect(result.error?.code).toBe('AUTH_EXPIRED');
+    expect(JSON.stringify(result)).not.toContain(TOKEN);
+  });
+
+  it('maps a missing Go subscription to NOT_ENTITLED', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+    stubJson(
+      {
+        type: 'error',
+        error: {
+          type: 'EntitlementError',
+          message: 'OpenCode Go subscription required.',
+        },
+      },
+      403,
+    );
+
+    const result = await new OpenCodeGoAdapter().fetch();
+
+    expect(result.state).toBe('unavailable');
+    expect(result.error?.code).toBe('NOT_ENTITLED');
+  });
+
+  it('maps rate limits and unexpected HTTP errors', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+    stubJson({}, 429);
+    const rateLimited = await new OpenCodeGoAdapter().fetch();
+
+    stubJson({}, 500);
+    const failed = await new OpenCodeGoAdapter().fetch();
+
+    expect(rateLimited.error?.code).toBe('RATE_LIMITED');
+    expect(failed.error?.code).toBe('NETWORK');
+  });
+
+  it('returns PARSE for invalid JSON or response structure', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+    stubText('{');
+    const invalidJson = await new OpenCodeGoAdapter().fetch();
+
+    stubJson({ usage: {} });
+    const invalidShape = await new OpenCodeGoAdapter().fetch();
+
+    expect(invalidJson.error?.code).toBe('PARSE');
+    expect(invalidShape.error?.code).toBe('PARSE');
+  });
+
+  it('re-fetches current usage on every call', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+    const secondResponse = {
+      ...happyResponse,
+      usage: {
+        ...happyResponse.usage,
+        rolling: { ...happyResponse.usage.rolling, percent: 88 },
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(happyResponse)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(secondResponse)));
     vi.stubGlobal('fetch', fetchMock);
 
     const adapter = new OpenCodeGoAdapter();
@@ -111,7 +211,7 @@ describe('OpenCodeGoAdapter', () => {
     const second = await adapter.fetch();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(first.windows.find((window) => window.label === '5h')?.usedPercent).toBe(17);
-    expect(second.windows.find((window) => window.label === '5h')?.usedPercent).toBe(88);
+    expect(first.windows[0]?.usedPercent).toBe(17);
+    expect(second.windows[0]?.usedPercent).toBe(88);
   });
 });

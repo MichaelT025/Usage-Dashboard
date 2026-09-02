@@ -14,7 +14,11 @@ const TOKEN = 'sk-ant-oat01-FAKE';
 async function writeEvidence(filename: string, result: unknown): Promise<void> {
   const dir = path.join(process.cwd(), '.omo', 'evidence');
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, filename), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await writeFile(
+    path.join(dir, filename),
+    `${JSON.stringify(result, null, 2)}\n`,
+    'utf8',
+  );
 }
 
 describe('ClaudeAdapter', () => {
@@ -48,25 +52,31 @@ describe('ClaudeAdapter', () => {
     expect(result.windows[0]?.usedPercent).toBe(35);
     expect(result.windows[1]?.label).toBe('Weekly');
     expect(result.windows[1]?.usedPercent).toBe(14);
-    expect(fetchMock).toHaveBeenCalledWith('https://api.anthropic.com/api/oauth/usage', {
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        'anthropic-beta': 'oauth-2025-04-20',
-        Accept: 'application/json',
-        'User-Agent': 'claude-code/2.1.0',
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.anthropic.com/api/oauth/usage',
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          'anthropic-beta': 'oauth-2025-04-20',
+          Accept: 'application/json',
+          'User-Agent': 'claude-code/2.1.0',
+        },
       },
-    });
+    );
 
     await writeEvidence('task-7-claude-happy.txt', result);
   });
 
   it('maps 401 to AUTH_EXPIRED without leaking the token', async () => {
     mockedGetClaudeToken.mockResolvedValue(TOKEN);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({}),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      }),
+    );
 
     const adapter = new ClaudeAdapter();
     const result = await adapter.fetch();
@@ -80,12 +90,15 @@ describe('ClaudeAdapter', () => {
 
   it('maps 429 to RATE_LIMITED', async () => {
     mockedGetClaudeToken.mockResolvedValue(TOKEN);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 429,
-      headers: { get: (_: string) => null },
-      json: async () => ({}),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: { get: (_: string) => null },
+        json: async () => ({}),
+      }),
+    );
 
     const adapter = new ClaudeAdapter();
     const result = await adapter.fetch();
@@ -95,7 +108,10 @@ describe('ClaudeAdapter', () => {
 
   it('maps network errors to NETWORK without leaking the token', async () => {
     mockedGetClaudeToken.mockResolvedValue(TOKEN);
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+    );
 
     const adapter = new ClaudeAdapter();
     const result = await adapter.fetch();

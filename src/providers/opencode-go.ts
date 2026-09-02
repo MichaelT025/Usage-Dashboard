@@ -1,93 +1,82 @@
-import type { IProviderAdapter, QuotaWindow, UsageData } from '../core/types.js';
-import { loadConfig } from '../core/config.js';
+import type {
+  IProviderAdapter,
+  ProviderError,
+  QuotaWindow,
+  UsageData,
+} from '../core/types.js';
+import { getOpenCodeGoToken } from '../core/credentials.js';
 import { safeErrorMessage } from '../core/redact.js';
 
-/**
- * OpenCode Go subscription usage adapter.
- *
- * Data source: HTML scrape of https://opencode.ai/workspace/{workspaceId}/go
- * The page is SERVER-RENDERED — the usage numbers are baked into the SolidJS hydration
- * payload on every request. Every poll issues a fresh GET, yielding always-current data.
- *
- * Auth: session cookie `auth=<Fe26.2**...>` — expires in hours/days, must be refreshed manually.
- * No official API exists (feature requests #29634, #31084 closed without action).
- *
- * Limits: ~$12/5h, ~$30/week, ~$60/month (tracked as dollar-percent, not token-percent).
- */
+const USAGE_URL = 'https://opencode.ai/zen/go/v1/usage';
 
-interface GoWindow {
-  status: string;
-  resetInSec: number;
-  usagePercent: number;
+interface GoUsageWindow {
+  status: 'ok' | 'rate-limited';
+  percent: number;
+  resetsAt: string;
 }
 
-function parseGoWindow(html: string, varName: string): GoWindow | null {
-  const match = html.match(
-    new RegExp(`${varName}:\\$R\\[\\d+\\]=\\{status:"([^"]*)",resetInSec:(\\d+),usagePercent:(\\d+)\\}`),
-  );
-  if (!match) return null;
+const WINDOW_DEFINITIONS = [
+  ['rolling', '5h', 18_000],
+  ['weekly', 'Weekly', 604_800],
+  ['monthly', 'Monthly', 2_592_000],
+] as const;
 
-  return {
-    status: match[1]!,
-    resetInSec: parseInt(match[2]!, 10),
-    usagePercent: parseInt(match[3]!, 10),
-  };
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function parseBalance(html: string): number | null {
-  const match = html.match(/balance:(\d+)(?:,|\})/);
-  return match ? Number(match[1]) : null;
+function parseWindow(value: unknown): GoUsageWindow | null {
+  if (!isRecord(value)) return null;
+
+  const status = value['status'];
+  const percent = value['percent'];
+  const resetsAt = value['resetsAt'];
+
+  if (status !== 'ok' && status !== 'rate-limited') return null;
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return null;
+  if (percent < 0 || percent > 100) return null;
+  if (typeof resetsAt !== 'string' || Number.isNaN(Date.parse(resetsAt)))
+    return null;
+
+  return { status, percent, resetsAt };
 }
 
-function isLoginPage(html: string): boolean {
-  return !html.includes('rollingUsage') && !html.includes('weeklyUsage');
-}
+export function parseGoUsage(
+  value: unknown,
+): Pick<UsageData, 'windows'> | null {
+  if (!isRecord(value) || !isRecord(value['usage'])) return null;
 
-export function parseGoUsage(html: string): Pick<UsageData, 'windows' | 'credits'> | null {
-  if (isLoginPage(html)) return null;
-
-  const rolling = parseGoWindow(html, 'rollingUsage');
-  const weekly = parseGoWindow(html, 'weeklyUsage');
-  const monthly = parseGoWindow(html, 'monthlyUsage');
-
-  if (!rolling && !weekly && !monthly) return null;
-
-  const now = Date.now();
+  const usage = value['usage'];
   const windows: QuotaWindow[] = [];
 
-  if (rolling) {
+  for (const [key, label, windowSeconds] of WINDOW_DEFINITIONS) {
+    const source = parseWindow(usage[key]);
+    if (!source) return null;
+
     windows.push({
-      label: '5h',
-      windowSeconds: 18000,
-      usedPercent: rolling.usagePercent,
-      resetsAt: new Date(now + rolling.resetInSec * 1000).toISOString(),
+      label,
+      windowSeconds,
+      usedPercent: source.percent,
+      resetsAt: source.resetsAt,
     });
   }
 
-  if (weekly) {
-    windows.push({
-      label: 'Weekly',
-      windowSeconds: 604800,
-      usedPercent: weekly.usagePercent,
-      resetsAt: new Date(now + weekly.resetInSec * 1000).toISOString(),
-    });
-  }
+  return { windows };
+}
 
-  if (monthly) {
-    windows.push({
-      label: 'Monthly',
-      windowSeconds: 2592000,
-      usedPercent: monthly.usagePercent,
-      resetsAt: new Date(now + monthly.resetInSec * 1000).toISOString(),
-    });
-  }
-
-  const balanceMicroCents = parseBalance(html);
-  const credits = balanceMicroCents != null
-    ? { label: 'Balance', balanceUsd: balanceMicroCents / 1e8 }
-    : undefined;
-
-  return { windows, credits };
+function errorUsage(
+  error: ProviderError,
+  fetchedAt: string,
+  state: UsageData['state'] = 'unavailable',
+): UsageData {
+  return {
+    providerId: 'opencode-go',
+    displayName: 'OpenCode Go',
+    state,
+    windows: [],
+    error,
+    fetchedAt,
+  };
 }
 
 export class OpenCodeGoAdapter implements IProviderAdapter {
@@ -96,107 +85,131 @@ export class OpenCodeGoAdapter implements IProviderAdapter {
 
   async fetch(): Promise<UsageData> {
     const fetchedAt = new Date().toISOString();
-    const config = loadConfig();
-    const { opencodeWorkspaceId, opencodeAuthCookie } = config;
+    const token = await getOpenCodeGoToken();
 
-    if (!opencodeWorkspaceId || !opencodeAuthCookie) {
-      return {
-        providerId: this.id,
-        displayName: this.displayName,
-        state: 'unconfigured',
-        windows: [],
-        error: {
+    if (!token) {
+      return errorUsage(
+        {
           code: 'NOT_CONFIGURED',
-          message: 'OpenCode Go workspace ID or auth cookie not configured',
-          hint: 'Run `llm-usage setup` or add opencodeWorkspaceId and opencodeAuthCookie to ~/.llm-usage/config.json',
+          message: 'OpenCode API key not found',
+          hint: 'Connect OpenCode Go using `/connect` or set OPENCODE_API_KEY',
         },
         fetchedAt,
-      };
+        'unconfigured',
+      );
     }
 
-    const url = `https://opencode.ai/workspace/${opencodeWorkspaceId}/go`;
+    let res: Response;
 
     try {
-      const res = await fetch(url, {
+      res = await fetch(USAGE_URL, {
         headers: {
-          Cookie: `auth=${opencodeAuthCookie}`,
-          Accept: 'text/html,application/xhtml+xml',
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
           'User-Agent': 'llm-usage',
         },
-        redirect: 'follow',
+        redirect: 'error',
       });
-
-      if (!res.ok && res.status !== 200) {
-        return {
-          providerId: this.id,
-          displayName: this.displayName,
-          state: 'unavailable',
-          windows: [],
-          error: {
-            code: 'NETWORK',
-            message: `HTTP ${res.status} from OpenCode Go console`,
-            hint: 'Could not load the OpenCode Go usage page — check your workspace ID',
-          },
-          fetchedAt,
-        };
-      }
-
-      const html = await res.text();
-
-      if (isLoginPage(html)) {
-        return {
-          providerId: this.id,
-          displayName: this.displayName,
-          state: 'unavailable',
-          windows: [],
-          error: {
-            code: 'COOKIE_EXPIRED',
-            message: 'OpenCode Go session cookie expired or invalid',
-            hint: 'Re-copy the `auth` cookie from opencode.ai (Settings > Auth) and update opencodeAuthCookie in config',
-          },
-          fetchedAt,
-        };
-      }
-
-      const parsed = parseGoUsage(html);
-
-      if (!parsed) {
-        return {
-          providerId: this.id,
-          displayName: this.displayName,
-          state: 'unavailable',
-          windows: [],
-          error: {
-            code: 'PARSE',
-            message: 'Could not parse OpenCode Go usage from page HTML',
-            hint: 'The OpenCode Go page format may have changed — check for updates to llm-usage',
-          },
-          fetchedAt,
-        };
-      }
-
-      return {
-        providerId: this.id,
-        displayName: this.displayName,
-        state: 'ok',
-        windows: parsed.windows,
-        credits: parsed.credits,
-        fetchedAt,
-      };
-    } catch (err) {
-      const msg = safeErrorMessage(err);
-      return {
-        providerId: this.id,
-        displayName: this.displayName,
-        state: 'unavailable',
-        windows: [],
-        error: {
+    } catch (error) {
+      return errorUsage(
+        {
           code: 'NETWORK',
-          message: msg,
-          hint: 'Could not reach opencode.ai — check network connectivity',
+          message: safeErrorMessage(error),
+          hint: 'Could not reach the OpenCode Go usage API',
         },
         fetchedAt,
-      };
+      );
     }
+
+    if (res.status === 401) {
+      return errorUsage(
+        {
+          code: 'AUTH_EXPIRED',
+          message: 'OpenCode API key was rejected',
+          hint: 'Reconnect OpenCode Go using `/connect` in OpenCode',
+        },
+        fetchedAt,
+      );
+    }
+
+    if (res.status === 403) {
+      let errorType: unknown;
+      try {
+        const body = (await res.json()) as {
+          error?: { type?: unknown };
+        };
+        errorType = body.error?.type;
+      } catch {
+        errorType = undefined;
+      }
+
+      if (errorType === 'EntitlementError') {
+        return errorUsage(
+          {
+            code: 'NOT_ENTITLED',
+            message: 'OpenCode Go subscription required',
+            hint: 'The API key is valid, but its workspace does not have an active Go subscription',
+          },
+          fetchedAt,
+        );
+      }
+
+      return errorUsage(
+        {
+          code: 'UNKNOWN',
+          message: 'OpenCode Go rejected the usage request',
+          hint: 'Check the OpenCode workspace and subscription status',
+        },
+        fetchedAt,
+      );
+    }
+
+    if (res.status === 429) {
+      return errorUsage(
+        {
+          code: 'RATE_LIMITED',
+          message: 'OpenCode Go usage API rate limited',
+          hint: 'Wait before refreshing usage again',
+        },
+        fetchedAt,
+      );
+    }
+    if (!res.ok) {
+      return errorUsage(
+        {
+          code: 'NETWORK',
+          message: `HTTP ${res.status} from OpenCode Go usage API`,
+          hint: 'The usage API returned an unexpected response',
+        },
+        fetchedAt,
+      );
+    }
+
+    let parsed: ReturnType<typeof parseGoUsage>;
+
+    try {
+      parsed = parseGoUsage(await res.json());
+    } catch {
+      parsed = null;
+    }
+
+    if (!parsed) {
+      return errorUsage(
+        {
+          code: 'PARSE',
+          message: 'Could not parse OpenCode Go usage response',
+          hint: 'The OpenCode Go usage API format may have changed',
+        },
+        fetchedAt,
+      );
+    }
+
+    return {
+      providerId: this.id,
+      displayName: this.displayName,
+      state: 'ok',
+      windows: parsed.windows,
+      fetchedAt,
+    };
   }
 }

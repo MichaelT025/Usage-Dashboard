@@ -7,7 +7,11 @@ import { ClaudeAdapter } from './providers/claude.js';
 import { CodexAdapter } from './providers/codex.js';
 import { OpenCodeGoAdapter } from './providers/opencode-go.js';
 import { loadConfig, validateConfig, saveConfig } from './core/config.js';
-import { getClaudeToken, getCodexToken } from './core/credentials.js';
+import {
+  getClaudeToken,
+  getCodexToken,
+  getOpenCodeGoToken,
+} from './core/credentials.js';
 import { redactSecrets } from './core/redact.js';
 import type { StatusResponse } from './core/types.js';
 
@@ -25,7 +29,11 @@ const MIME: Record<string, string> = {
   '.woff': 'font/woff',
 };
 
-function jsonResponse(res: http.ServerResponse, data: unknown, status = 200): void {
+function jsonResponse(
+  res: http.ServerResponse,
+  data: unknown,
+  status = 200,
+): void {
   const safe = redactSecrets(data);
   const body = JSON.stringify(safe);
   res.writeHead(status, {
@@ -69,8 +77,15 @@ export interface ServerHandle {
 export function startServer(opts: { port: number }): Promise<ServerHandle> {
   return new Promise((resolve, reject) => {
     const config = loadConfig();
-    const adapters = [new ClaudeAdapter(), new CodexAdapter(), new OpenCodeGoAdapter()];
-    const poller = new Poller({ adapters, intervalSec: config.refreshIntervalSec });
+    const adapters = [
+      new ClaudeAdapter(),
+      new CodexAdapter(),
+      new OpenCodeGoAdapter(),
+    ];
+    const poller = new Poller({
+      adapters,
+      intervalSec: config.refreshIntervalSec,
+    });
     poller.start();
 
     // In production (dist/server.js): __dirname = dist/, public is at dist/public/
@@ -87,8 +102,9 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       if (method === 'GET' && pathname === '/api/status') {
         const latest = poller.getLatest();
         if (!latest) {
-          poller.refreshNow()
-            .then(result => jsonResponse(res, result))
+          poller
+            .refreshNow()
+            .then((result) => jsonResponse(res, result))
             .catch(() => jsonResponse(res, emptyStatus(), 503));
           return;
         }
@@ -98,8 +114,9 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       }
 
       if (method === 'POST' && pathname === '/api/refresh') {
-        poller.refreshNow()
-          .then(result => jsonResponse(res, result))
+        poller
+          .refreshNow()
+          .then((result) => jsonResponse(res, result))
           .catch(() => jsonResponse(res, emptyStatus(), 503));
         return;
       }
@@ -107,14 +124,16 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       // GET /api/config — non-secret status only, never returns stored credentials
       if (method === 'GET' && pathname === '/api/config') {
         const cfg = loadConfig();
-        const claudeToken = await getClaudeToken();
-        const codexToken = await getCodexToken();
+        const [claudeToken, codexToken, openCodeGoToken] = await Promise.all([
+          getClaudeToken(),
+          getCodexToken(),
+          getOpenCodeGoToken(),
+        ]);
         jsonResponse(res, {
-          opencodeWorkspaceIdSet: !!cfg.opencodeWorkspaceId,
-          opencodeAuthCookieSet: !!cfg.opencodeAuthCookie,
           refreshIntervalSec: cfg.refreshIntervalSec,
           claudeTokenFound: !!claudeToken,
           codexTokenFound: !!codexToken,
+          openCodeGoTokenFound: !!openCodeGoToken,
         });
         return;
       }
@@ -124,7 +143,12 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
         // Same-origin guard: reject requests with a non-localhost Origin header
         const origin = req.headers['origin'] ?? '';
         const allowedOrigin = process.env.ALLOWED_ORIGIN || '';
-        if (origin !== '' && !origin.startsWith('http://localhost:') && !origin.startsWith('http://127.0.0.1:') && origin !== allowedOrigin) {
+        if (
+          origin !== '' &&
+          !origin.startsWith('http://localhost:') &&
+          !origin.startsWith('http://127.0.0.1:') &&
+          origin !== allowedOrigin
+        ) {
           res.writeHead(403, { 'Content-Type': 'text/plain' });
           res.end('Forbidden: cross-origin request');
           return;
@@ -142,15 +166,16 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
         }
 
         let parsed: Record<string, unknown>;
-        try { parsed = JSON.parse(rawBody) as Record<string, unknown>; }
-        catch { res.writeHead(400, { 'Content-Type': 'text/plain' }); res.end('Invalid JSON'); return; }
+        try {
+          parsed = JSON.parse(rawBody) as Record<string, unknown>;
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Invalid JSON');
+          return;
+        }
 
         // Only accept the whitelisted config fields
         const update: Parameters<typeof saveConfig>[0] = {};
-        if (typeof parsed['opencodeWorkspaceId'] === 'string' && parsed['opencodeWorkspaceId'].trim())
-          update.opencodeWorkspaceId = parsed['opencodeWorkspaceId'] as string;
-        if (typeof parsed['opencodeAuthCookie'] === 'string' && parsed['opencodeAuthCookie'].trim())
-          update.opencodeAuthCookie = parsed['opencodeAuthCookie'] as string;
         if (typeof parsed['refreshIntervalSec'] === 'number')
           update.refreshIntervalSec = parsed['refreshIntervalSec'] as number;
 
@@ -158,7 +183,11 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
           validateConfig(update);
           saveConfig(update);
         } catch (err) {
-          jsonResponse(res, { error: err instanceof Error ? err.message : 'Validation failed' }, 400);
+          jsonResponse(
+            res,
+            { error: err instanceof Error ? err.message : 'Validation failed' },
+            400,
+          );
           return;
         }
 
@@ -167,14 +196,16 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
 
         // Return updated non-secret status
         const cfg = loadConfig();
-        const claudeToken = await getClaudeToken();
-        const codexToken = await getCodexToken();
+        const [claudeToken, codexToken, openCodeGoToken] = await Promise.all([
+          getClaudeToken(),
+          getCodexToken(),
+          getOpenCodeGoToken(),
+        ]);
         jsonResponse(res, {
-          opencodeWorkspaceIdSet: !!cfg.opencodeWorkspaceId,
-          opencodeAuthCookieSet: !!cfg.opencodeAuthCookie,
           refreshIntervalSec: cfg.refreshIntervalSec,
           claudeTokenFound: !!claudeToken,
           codexTokenFound: !!codexToken,
+          openCodeGoTokenFound: !!openCodeGoToken,
         });
         return;
       }
@@ -182,9 +213,13 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       if (method === 'GET') {
         let filePath: string;
         try {
-          filePath = pathname === '/'
-            ? path.join(publicDir, 'index.html')
-            : path.join(publicDir, decodeURIComponent(pathname.replace(/^\/+/, '')));
+          filePath =
+            pathname === '/'
+              ? path.join(publicDir, 'index.html')
+              : path.join(
+                  publicDir,
+                  decodeURIComponent(pathname.replace(/^\/+/, '')),
+                );
         } catch {
           res.writeHead(400, { 'Content-Type': 'text/plain' });
           res.end('Bad Request');
@@ -192,7 +227,10 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
         }
 
         const resolved = path.resolve(filePath);
-        if (resolved !== publicDir && !resolved.startsWith(publicDir + path.sep)) {
+        if (
+          resolved !== publicDir &&
+          !resolved.startsWith(publicDir + path.sep)
+        ) {
           res.writeHead(403, { 'Content-Type': 'text/plain' });
           res.end('Forbidden');
           return;
@@ -206,7 +244,7 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       res.end('Not Found');
     });
 
-    server.on('error', err => {
+    server.on('error', (err) => {
       poller.stop();
       reject(err);
     });

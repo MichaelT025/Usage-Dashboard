@@ -3,18 +3,25 @@
   "version": "0.1.0",
   "description": "Local web dashboard for LLM subscription usage (Claude, Codex, OpenCode Go)",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "bin": { "llm-usage": "dist/cli.js" },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "llm-usage": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc && node scripts/copy-public.mjs",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "vitest": "^1.6.0",
     "@types/node": "^20.0.0",
-    "tsx": "^4.0.0"
+    "prettier": "^3.9.6",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
   }
 }

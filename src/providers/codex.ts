@@ -1,4 +1,8 @@
-import type { IProviderAdapter, UsageData, QuotaWindow } from '../core/types.js';
+import type {
+  IProviderAdapter,
+  UsageData,
+  QuotaWindow,
+} from '../core/types.js';
 import { getCodexToken } from '../core/credentials.js';
 import { safeErrorMessage } from '../core/redact.js';
 
@@ -43,12 +47,16 @@ function labelWindow(windowSeconds: number): string {
   return `${Math.round(windowSeconds / 86400)}d`;
 }
 
-export function parseCodexUsage(json: WhamUsageResponse): Pick<UsageData, 'windows' | 'credits' | 'plan'> {
+export function parseCodexUsage(
+  json: WhamUsageResponse,
+): Pick<UsageData, 'windows' | 'credits' | 'plan'> {
   const windows: QuotaWindow[] = [];
 
   const snapshots: WindowSnapshot[] = [];
-  if (json.rate_limit?.primary_window) snapshots.push(json.rate_limit.primary_window);
-  if (json.rate_limit?.secondary_window) snapshots.push(json.rate_limit.secondary_window);
+  if (json.rate_limit?.primary_window)
+    snapshots.push(json.rate_limit.primary_window);
+  if (json.rate_limit?.secondary_window)
+    snapshots.push(json.rate_limit.secondary_window);
 
   snapshots.sort((a, b) => a.limit_window_seconds - b.limit_window_seconds);
 
@@ -73,9 +81,10 @@ export function parseCodexUsage(json: WhamUsageResponse): Pick<UsageData, 'windo
     }
   }
 
-  const credits = json.credits?.has_credits && json.credits.balance != null
-    ? { label: 'Credits', balanceUsd: json.credits.balance }
-    : undefined;
+  const credits =
+    json.credits?.has_credits && json.credits.balance != null
+      ? { label: 'Credits', balanceUsd: json.credits.balance }
+      : undefined;
 
   return {
     windows,
@@ -163,7 +172,7 @@ export class CodexAdapter implements IProviderAdapter {
         };
       }
 
-      const json = await res.json() as WhamUsageResponse;
+      const json = (await res.json()) as WhamUsageResponse;
       const { windows, credits, plan } = parseCodexUsage(json);
 
       return {

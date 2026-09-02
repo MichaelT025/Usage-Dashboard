@@ -2,10 +2,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getClaudeToken, getCodexToken } from './credentials.js';
+import {
+  getClaudeToken,
+  getCodexToken,
+  getOpenCodeGoToken,
+} from './credentials.js';
 
 const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
 const originalCodexHome = process.env.CODEX_HOME;
+const originalOpenCodeApiKey = process.env.OPENCODE_API_KEY;
+const originalOpenCodeAuthPath = process.env.OPENCODE_AUTH_PATH;
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 
 let tempRoot: string;
@@ -27,18 +33,31 @@ function base64UrlJson(value: unknown): string {
 }
 
 beforeEach(() => {
-  tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-dashboard-credentials-'));
+  tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'usage-dashboard-credentials-'),
+  );
+  delete process.env.OPENCODE_API_KEY;
+  delete process.env.OPENCODE_AUTH_PATH;
   vi.restoreAllMocks();
 });
 
 afterEach(() => {
-  if (originalClaudeConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  if (originalClaudeConfigDir === undefined)
+    delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
 
   if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
   else process.env.CODEX_HOME = originalCodexHome;
 
-  if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+  if (originalOpenCodeApiKey === undefined) delete process.env.OPENCODE_API_KEY;
+  else process.env.OPENCODE_API_KEY = originalOpenCodeApiKey;
+
+  if (originalOpenCodeAuthPath === undefined)
+    delete process.env.OPENCODE_AUTH_PATH;
+  else process.env.OPENCODE_AUTH_PATH = originalOpenCodeAuthPath;
+
+  if (originalPlatform)
+    Object.defineProperty(process, 'platform', originalPlatform);
   vi.restoreAllMocks();
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -71,7 +90,9 @@ describe('getClaudeToken', () => {
     );
     mockPlatform('linux');
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
     await expect(getClaudeToken()).resolves.toBeNull();
 
@@ -100,5 +121,57 @@ describe('getCodexToken', () => {
       accessToken: 'CODEX-ACCESS-TOKEN',
       accountId: 'acct_123',
     });
+  });
+});
+
+describe('getOpenCodeGoToken', () => {
+  it('resolves the opencode-go API key from the CLI auth store', async () => {
+    const authPath = path.join(tempRoot, 'opencode-auth.json');
+    process.env.OPENCODE_AUTH_PATH = authPath;
+    writeJson(authPath, {
+      'opencode-go': { type: 'api', key: 'OPENCODE-GO-FIXTURE' },
+    });
+
+    await expect(getOpenCodeGoToken()).resolves.toBe('OPENCODE-GO-FIXTURE');
+  });
+
+  it('falls back to the shared opencode entry', async () => {
+    const authPath = path.join(tempRoot, 'opencode-auth.json');
+    process.env.OPENCODE_AUTH_PATH = authPath;
+    writeJson(authPath, {
+      opencode: { type: 'api', key: 'OPENCODE-SHARED-FIXTURE' },
+    });
+
+    await expect(getOpenCodeGoToken()).resolves.toBe('OPENCODE-SHARED-FIXTURE');
+  });
+
+  it('prefers OPENCODE_API_KEY over the auth store', async () => {
+    const authPath = path.join(tempRoot, 'opencode-auth.json');
+    process.env.OPENCODE_AUTH_PATH = authPath;
+    process.env.OPENCODE_API_KEY = 'OPENCODE-ENV-FIXTURE';
+    writeJson(authPath, {
+      'opencode-go': { type: 'api', key: 'OPENCODE-FILE-FIXTURE' },
+    });
+
+    await expect(getOpenCodeGoToken()).resolves.toBe('OPENCODE-ENV-FIXTURE');
+  });
+
+  it('returns null without exposing malformed credential contents', async () => {
+    const authPath = path.join(tempRoot, 'opencode-auth.json');
+    const fakeToken = 'sk-OPENCODE-DO-NOT-LEAK';
+    process.env.OPENCODE_AUTH_PATH = authPath;
+    fs.writeFileSync(
+      authPath,
+      `{ "opencode-go": { "type": "api", "key": "${fakeToken}" `,
+      'utf8',
+    );
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    await expect(getOpenCodeGoToken()).resolves.toBeNull();
+    expect(JSON.stringify(log.mock.calls)).not.toContain(fakeToken);
+    expect(JSON.stringify(error.mock.calls)).not.toContain(fakeToken);
   });
 });

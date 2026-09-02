@@ -6,11 +6,7 @@
 
 /** Supported provider IDs */
 export type ProviderId =
-  | 'claude'
-  | 'codex'
-  | 'opencode-go'
-  | 'zen'
-  | 'openrouter';
+  'claude' | 'codex' | 'opencode-go' | 'zen' | 'openrouter';
 
 /**
  * Provider lifecycle states:
@@ -19,17 +15,18 @@ export type ProviderId =
  * - unconfigured: credentials/config not set up yet
  * - not_implemented: Phase-2 stub; no real implementation yet
  */
-export type ProviderState = 'ok' | 'unavailable' | 'unconfigured' | 'not_implemented';
+export type ProviderState =
+  'ok' | 'unavailable' | 'unconfigured' | 'not_implemented';
 
 /** Typed error codes for per-provider error cards */
 export type ProviderErrorCode =
-  | 'AUTH_EXPIRED'     // OAuth/access token expired → re-login hint
-  | 'COOKIE_EXPIRED'   // Session cookie expired (OpenCode Go) → refresh hint
-  | 'RATE_LIMITED'     // 429 from usage endpoint → back-off hint
-  | 'NETWORK'          // DNS/timeout/connection refused
-  | 'PARSE'            // Unexpected response shape
-  | 'NOT_CONFIGURED'   // Missing required credential in config
-  | 'UNKNOWN';         // Catch-all
+  | 'AUTH_EXPIRED' // OAuth/access token expired → re-login hint
+  | 'RATE_LIMITED' // 429 from usage endpoint → back-off hint
+  | 'NETWORK' // DNS/timeout/connection refused
+  | 'PARSE' // Unexpected response shape
+  | 'NOT_CONFIGURED' // Missing required credential in config
+  | 'NOT_ENTITLED' // Credential is valid, but required subscription is absent
+  | 'UNKNOWN'; // Catch-all
 
 /** Structured error attached to unavailable/unconfigured UsageData */
 export interface ProviderError {
@@ -46,10 +43,10 @@ export interface ProviderError {
  * windowSeconds is informational (18000=5h, 604800=7d, 2592000=30d).
  */
 export interface QuotaWindow {
-  label: string;         // e.g. "5h", "Weekly", "Monthly"
+  label: string; // e.g. "5h", "Weekly", "Monthly"
   windowSeconds: number; // duration of this window
-  usedPercent: number;   // 0–100
-  resetsAt: string;      // ISO 8601
+  usedPercent: number; // 0–100
+  resetsAt: string; // ISO 8601
 }
 
 /**
@@ -57,9 +54,9 @@ export interface QuotaWindow {
  * Optional on subscription providers.
  */
 export interface CreditsInfo {
-  label: string;          // e.g. "Extra usage", "Balance"
-  valueUsd?: number;      // amount consumed (if known)
-  balanceUsd?: number;    // remaining balance (if known)
+  label: string; // e.g. "Extra usage", "Balance"
+  valueUsd?: number; // amount consumed (if known)
+  balanceUsd?: number; // remaining balance (if known)
 }
 
 /**
@@ -69,9 +66,9 @@ export interface CreditsInfo {
  */
 export interface UsageData {
   providerId: ProviderId;
-  displayName: string;       // e.g. "Claude", "Codex", "OpenCode Go"
+  displayName: string; // e.g. "Claude", "Codex", "OpenCode Go"
   state: ProviderState;
-  plan?: string;             // e.g. "Max 5x", "Plus" — optional, when derivable
+  plan?: string; // e.g. "Max 5x", "Plus" — optional, when derivable
   /** Rate-limit windows. Empty when state is not 'ok'. */
   windows: QuotaWindow[];
   /** Credits/balance — optional, mainly Phase-2 */

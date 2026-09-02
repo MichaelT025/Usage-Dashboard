@@ -3,7 +3,10 @@ import { Poller } from './core/poller.js';
 import { renderFrame } from './render.js';
 import process from 'node:process';
 
-export function startTui(adapters: IProviderAdapter[], opts: { intervalSec: number }): void {
+export function startTui(
+  adapters: IProviderAdapter[],
+  opts: { intervalSec: number },
+): void {
   if (process.stdin.isTTY) process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
@@ -18,9 +21,7 @@ export function startTui(adapters: IProviderAdapter[], opts: { intervalSec: numb
   function draw(): void {
     const cols = process.stdout.columns ?? 80;
     const color = process.env.NO_COLOR === undefined;
-    const frame = cached
-      ? renderFrame(cached, { cols, color })
-      : 'Fetching…';
+    const frame = cached ? renderFrame(cached, { cols, color }) : 'Fetching…';
     const lines = (frame + '\n\n[q] quit  [r] refresh\n').split('\n');
 
     // Move cursor back to the top of the previous frame
@@ -46,7 +47,13 @@ export function startTui(adapters: IProviderAdapter[], opts: { intervalSec: numb
     lastFrameHeight = lines.length;
   }
 
-  poller.refreshNow().then(r => { cached = r; draw(); }).catch(() => {});
+  poller
+    .refreshNow()
+    .then((r) => {
+      cached = r;
+      draw();
+    })
+    .catch(() => {});
   draw();
 
   const tick = setInterval(() => {
@@ -58,7 +65,13 @@ export function startTui(adapters: IProviderAdapter[], opts: { intervalSec: numb
   process.stdin.on('data', (key: string) => {
     if (key === 'q' || key === '\u0003') quit();
     else if (key === 'r') {
-      poller.refreshNow().then(r => { cached = r; draw(); }).catch(() => {});
+      poller
+        .refreshNow()
+        .then((r) => {
+          cached = r;
+          draw();
+        })
+        .catch(() => {});
     }
   });
 
@@ -83,7 +96,7 @@ export function startTui(adapters: IProviderAdapter[], opts: { intervalSec: numb
   process.on('SIGTERM', quit);
   process.on('uncaughtException', (e: unknown) => {
     restoreTerminal();
-    console.error((e instanceof Error ? e.message : String(e)));
+    console.error(e instanceof Error ? e.message : String(e));
     process.exit(1);
   });
 }
