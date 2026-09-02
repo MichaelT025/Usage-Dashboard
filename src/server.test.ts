@@ -53,8 +53,7 @@ describe('server refresh flow', () => {
     const body = await res.json();
     expect(typeof body.claudeTokenFound).toBe('boolean');
     expect(typeof body.codexTokenFound).toBe('boolean');
-    expect(typeof body.opencodeWorkspaceIdSet).toBe('boolean');
-    expect(typeof body.opencodeAuthCookieSet).toBe('boolean');
+    expect(typeof body.openCodeGoTokenFound).toBe('boolean');
     expect(typeof body.refreshIntervalSec).toBe('number');
     // Never returns secret values
     expect(body).not.toHaveProperty('opencodeAuthCookie');
