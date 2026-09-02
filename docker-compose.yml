@@ -10,7 +10,8 @@ services:
       - ALLOWED_ORIGIN=https://usage.mktesfaye.com
     volumes:
       - llm_usage_config:/home/node/.llm-usage
-      - ${HOME}/.claude/.credentials.json:/home/node/.claude/.credentials.json:ro
+      # Mount the directory so atomic credential-file replacements remain visible.
+      - ${HOME}/.claude:/home/node/.claude:ro
       - ${HOME}/.codex/auth.json:/home/node/.codex/auth.json:ro
       - ${HOME}/.local/share/opencode/auth.json:/home/node/.local/share/opencode/auth.json:ro
     healthcheck:
