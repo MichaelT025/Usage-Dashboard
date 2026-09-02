@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
-import { claudeCredentialsPath, codexAuthPath } from './paths.js';
+import { claudeCredentialsPath, codexAuthPath, opencodeAuthPath } from './paths.js';
 import { redactSecrets, safeErrorMessage } from './redact.js';
 
 /**
@@ -92,4 +92,28 @@ export async function getCodexToken(): Promise<{ accessToken: string; accountId?
     void redactSecrets(err);
     return null;
   }
+}
+
+export async function getOpenCodeGoToken(): Promise<string | null> {
+  const environmentKey = process.env['OPENCODE_API_KEY']?.trim();
+  if (environmentKey) return environmentKey;
+  try {
+    const filePath = opencodeAuthPath();
+    if(!fs.existsSync(filePath)) return null;
+
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const json = JSON.parse(raw) as Record<string, unknown>;
+
+    for(const providerId of ['opencode-go', 'opencode']) {
+      const entry = json[providerId] as Record<string, unknown> | undefined;
+      const key = entry?.['key'];
+      if (entry?.['type'] === 'api' && typeof key ==='string' && key.length > 0){
+        return key;
+      }
+    }
+  } catch (err) {
+    void safeErrorMessage(err);
+    void redactSecrets(err);
+  }
+  return null;
 }
