@@ -12,6 +12,7 @@ services:
       - llm_usage_config:/home/node/.llm-usage
       - ${HOME}/.claude/.credentials.json:/home/node/.claude/.credentials.json:ro
       - ${HOME}/.codex/auth.json:/home/node/.codex/auth.json:ro
+      - ${HOME}/.local/share/opencode/auth.json:/home/node/.local/share/opencode/auth.json:ro
     healthcheck:
       test:
         [

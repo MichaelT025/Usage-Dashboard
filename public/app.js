@@ -361,21 +361,8 @@ function initDrawer() {
           <span class="${s.claudeTokenFound ? 'status-ok' : 'status-warn'}">${s.claudeTokenFound ? '✓ configured' : '✗ run `claude`'}</span></div>
         <div class="status-row"><span>Codex</span>
           <span class="${s.codexTokenFound ? 'status-ok' : 'status-warn'}">${s.codexTokenFound ? '✓ configured' : '✗ run `codex login`'}</span></div>
-        <div class="status-row"><span>OpenCode Go workspace</span>
-          <span class="${s.opencodeWorkspaceIdSet ? 'status-ok' : 'status-warn'}">${s.opencodeWorkspaceIdSet ? '✓ set' : '✗ not set'}</span></div>
-        <div class="status-row"><span>OpenCode Go cookie</span>
-          <span class="${s.opencodeAuthCookieSet ? 'status-ok' : 'status-warn'}">${s.opencodeAuthCookieSet ? '✓ set' : '✗ not set'}</span></div>
-      </div>
-      <div class="settings-section">
-        <h3>OpenCode Go</h3>
-        <p class="settings-hint">Workspace ID is in the opencode.ai URL: /workspace/<strong>wrk_…</strong>/go</p>
-        <label class="settings-label">Workspace ID
-          <input type="text" id="s-wsid" placeholder="wrk_YOUR_ID_HERE" autocomplete="off"/>
-        </label>
-        <p class="settings-hint">Copy the <code>auth</code> cookie from browser DevTools</p>
-        <label class="settings-label">Auth Cookie
-          <input type="password" id="s-cookie" placeholder="Fe26.2**… (paste here)" autocomplete="new-password"/>
-        </label>
+        <div class="status-row"><span>OpenCode Go</span>
+          <span class="${s.openCodeGoTokenFound ? 'status-ok' : 'status-warn'}">${s.openCodeGoTokenFound ? '✓ API key found' : '✗ use `/connect` in OpenCode'}</span></div>
       </div>
       <div class="settings-section">
         <h3>Refresh Interval</h3>
@@ -401,15 +388,11 @@ function initDrawer() {
   }
 
   async function doSave() {
-    const wsid = document.getElementById('s-wsid')?.value?.trim();
-    const cookie = document.getElementById('s-cookie')?.value?.trim();
     const interval = parseInt(
       document.getElementById('s-interval')?.value ?? '180',
       10,
     );
     const payload = {};
-    if (wsid) payload.opencodeWorkspaceId = wsid;
-    if (cookie) payload.opencodeAuthCookie = cookie;
     if (interval >= 30) payload.refreshIntervalSec = interval;
 
     const fb = document.getElementById('s-feedback');
@@ -427,8 +410,6 @@ function initDrawer() {
       } else {
         showFeedback(fb, '✓ Saved', 'success');
         if (interval >= 30) refreshIntervalMs = interval * 1000;
-        const cookieEl = document.getElementById('s-cookie');
-        if (cookieEl) cookieEl.value = ''; // never echo stored value
         setTimeout(() => refresh(true), 600);
       }
     } catch {

@@ -7,7 +7,7 @@
  *   llm-usage --watch             Live terminal UI (alias: --tui)
  *   llm-usage --json              Print JSON snapshot and exit
  *   llm-usage --dash [options]    Start dashboard at http://localhost:PORT
- *   llm-usage setup [--check] [--no-validate]  Interactive setup wizard
+ *   llm-usage setup [--check]  Interactive setup wizard
  *   llm-usage --help              Show usage
  */
 
@@ -32,8 +32,7 @@ const subcommand = args[0];
 if (subcommand === 'setup') {
   const { runSetupWizard } = await import('./setup.js');
   const check = args.includes('--check');
-  const noValidate = args.includes('--no-validate');
-  await runSetupWizard({ check, noValidate });
+  await runSetupWizard({ check });
   process.exit(0);
 }
 
@@ -49,7 +48,6 @@ USAGE
   llm-usage --dash [options]    Launch the local web dashboard
   llm-usage setup               Interactive setup wizard
   llm-usage setup --check       Check current provider configuration
-  llm-usage setup --no-validate Skip live validation during setup
 
 OPTIONS
   --watch, --tui   Live TUI — requires an interactive terminal (TTY)
@@ -108,7 +106,7 @@ if (dash) {
         '📋 Created example config at ~/.llm-usage/config.example.json',
       );
       console.log(
-        '   Run `llm-usage setup` to configure OpenCode Go credentials.\n',
+        '   Provider credentials are read automatically from local CLI auth stores.\n',
       );
     } catch {
       void 0;
@@ -184,7 +182,7 @@ async function dashMain(): Promise<void> {
         `📋 Created example config at ~/.llm-usage/config.example.json`,
       );
       console.log(
-        `   Run \`llm-usage setup\` to configure OpenCode Go credentials.\n`,
+        `   Provider credentials are read automatically from local CLI auth stores.\n`,
       );
     } catch {
       void 0; // non-fatal — writeExampleConfig can fail silently on first run

@@ -21,7 +21,6 @@ export type ProviderState =
 /** Typed error codes for per-provider error cards */
 export type ProviderErrorCode =
   | 'AUTH_EXPIRED' // OAuth/access token expired → re-login hint
-  | 'COOKIE_EXPIRED' // Session cookie expired (OpenCode Go) → refresh hint
   | 'RATE_LIMITED' // 429 from usage endpoint → back-off hint
   | 'NETWORK' // DNS/timeout/connection refused
   | 'PARSE' // Unexpected response shape

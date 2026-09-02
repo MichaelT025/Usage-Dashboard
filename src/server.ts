@@ -7,7 +7,11 @@ import { ClaudeAdapter } from './providers/claude.js';
 import { CodexAdapter } from './providers/codex.js';
 import { OpenCodeGoAdapter } from './providers/opencode-go.js';
 import { loadConfig, validateConfig, saveConfig } from './core/config.js';
-import { getClaudeToken, getCodexToken } from './core/credentials.js';
+import {
+  getClaudeToken,
+  getCodexToken,
+  getOpenCodeGoToken,
+} from './core/credentials.js';
 import { redactSecrets } from './core/redact.js';
 import type { StatusResponse } from './core/types.js';
 
@@ -120,14 +124,16 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       // GET /api/config — non-secret status only, never returns stored credentials
       if (method === 'GET' && pathname === '/api/config') {
         const cfg = loadConfig();
-        const claudeToken = await getClaudeToken();
-        const codexToken = await getCodexToken();
+        const [claudeToken, codexToken, openCodeGoToken] = await Promise.all([
+          getClaudeToken(),
+          getCodexToken(),
+          getOpenCodeGoToken(),
+        ]);
         jsonResponse(res, {
-          opencodeWorkspaceIdSet: !!cfg.opencodeWorkspaceId,
-          opencodeAuthCookieSet: !!cfg.opencodeAuthCookie,
           refreshIntervalSec: cfg.refreshIntervalSec,
           claudeTokenFound: !!claudeToken,
           codexTokenFound: !!codexToken,
+          openCodeGoTokenFound: !!openCodeGoToken,
         });
         return;
       }
@@ -170,16 +176,6 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
 
         // Only accept the whitelisted config fields
         const update: Parameters<typeof saveConfig>[0] = {};
-        if (
-          typeof parsed['opencodeWorkspaceId'] === 'string' &&
-          parsed['opencodeWorkspaceId'].trim()
-        )
-          update.opencodeWorkspaceId = parsed['opencodeWorkspaceId'] as string;
-        if (
-          typeof parsed['opencodeAuthCookie'] === 'string' &&
-          parsed['opencodeAuthCookie'].trim()
-        )
-          update.opencodeAuthCookie = parsed['opencodeAuthCookie'] as string;
         if (typeof parsed['refreshIntervalSec'] === 'number')
           update.refreshIntervalSec = parsed['refreshIntervalSec'] as number;
 
@@ -200,14 +196,16 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
 
         // Return updated non-secret status
         const cfg = loadConfig();
-        const claudeToken = await getClaudeToken();
-        const codexToken = await getCodexToken();
+        const [claudeToken, codexToken, openCodeGoToken] = await Promise.all([
+          getClaudeToken(),
+          getCodexToken(),
+          getOpenCodeGoToken(),
+        ]);
         jsonResponse(res, {
-          opencodeWorkspaceIdSet: !!cfg.opencodeWorkspaceId,
-          opencodeAuthCookieSet: !!cfg.opencodeAuthCookie,
           refreshIntervalSec: cfg.refreshIntervalSec,
           claudeTokenFound: !!claudeToken,
           codexTokenFound: !!codexToken,
+          openCodeGoTokenFound: !!openCodeGoToken,
         });
         return;
       }
