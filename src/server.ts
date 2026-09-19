@@ -5,11 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { Poller } from './core/poller.js';
 import { ClaudeAdapter } from './providers/claude.js';
 import { CodexAdapter } from './providers/codex.js';
+import { CommandCodeAdapter } from './providers/command-code.js';
 import { OpenCodeGoAdapter } from './providers/opencode-go.js';
 import { loadConfig, validateConfig, saveConfig } from './core/config.js';
 import {
   getClaudeToken,
   getCodexToken,
+  getCommandCodeToken,
   getOpenCodeGoToken,
 } from './core/credentials.js';
 import { redactSecrets } from './core/redact.js';
@@ -80,6 +82,7 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
     const adapters = [
       new ClaudeAdapter(),
       new CodexAdapter(),
+      new CommandCodeAdapter(),
       new OpenCodeGoAdapter(),
     ];
     const poller = new Poller({
@@ -124,15 +127,18 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
       // GET /api/config — non-secret status only, never returns stored credentials
       if (method === 'GET' && pathname === '/api/config') {
         const cfg = loadConfig();
-        const [claudeToken, codexToken, openCodeGoToken] = await Promise.all([
-          getClaudeToken(),
-          getCodexToken(),
-          getOpenCodeGoToken(),
-        ]);
+        const [claudeToken, codexToken, commandCodeToken, openCodeGoToken] =
+          await Promise.all([
+            getClaudeToken(),
+            getCodexToken(),
+            getCommandCodeToken(),
+            getOpenCodeGoToken(),
+          ]);
         jsonResponse(res, {
           refreshIntervalSec: cfg.refreshIntervalSec,
           claudeTokenFound: !!claudeToken,
           codexTokenFound: !!codexToken,
+          commandCodeTokenFound: !!commandCodeToken,
           openCodeGoTokenFound: !!openCodeGoToken,
         });
         return;
@@ -196,15 +202,18 @@ export function startServer(opts: { port: number }): Promise<ServerHandle> {
 
         // Return updated non-secret status
         const cfg = loadConfig();
-        const [claudeToken, codexToken, openCodeGoToken] = await Promise.all([
-          getClaudeToken(),
-          getCodexToken(),
-          getOpenCodeGoToken(),
-        ]);
+        const [claudeToken, codexToken, commandCodeToken, openCodeGoToken] =
+          await Promise.all([
+            getClaudeToken(),
+            getCodexToken(),
+            getCommandCodeToken(),
+            getOpenCodeGoToken(),
+          ]);
         jsonResponse(res, {
           refreshIntervalSec: cfg.refreshIntervalSec,
           claudeTokenFound: !!claudeToken,
           codexTokenFound: !!codexToken,
+          commandCodeTokenFound: !!commandCodeToken,
           openCodeGoTokenFound: !!openCodeGoToken,
         });
         return;

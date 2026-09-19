@@ -8,7 +8,8 @@
  *   llm-usage --json              Print JSON snapshot and exit
  *   llm-usage --dash [options]    Start dashboard at http://localhost:PORT
  *   llm-usage setup [--check]  Interactive setup wizard
- *   llm-usage --help              Show usage
+ *   llm-usage add [...]          Guided provider setup (never handles secrets)
+ *   llm-usage --help             Show usage
  */
 
 import { existsSync } from 'node:fs';
@@ -22,6 +23,7 @@ import { startServer } from './server.js';
 import { startTui } from './tui.js';
 import { ClaudeAdapter } from './providers/claude.js';
 import { CodexAdapter } from './providers/codex.js';
+import { CommandCodeAdapter } from './providers/command-code.js';
 import { OpenCodeGoAdapter } from './providers/opencode-go.js';
 import type { IProviderAdapter, UsageData } from './core/types.js';
 
@@ -36,6 +38,13 @@ if (subcommand === 'setup') {
   process.exit(0);
 }
 
+// --- add subcommand (guided provider setup; never handles secrets) ---
+if (subcommand === 'add') {
+  const { runAddCommand } = await import('./setup.js');
+  const code = await runAddCommand(args.slice(1));
+  process.exit(code);
+}
+
 if (args.includes('--help') || args.includes('-h')) {
   console.log(
     `
@@ -48,6 +57,7 @@ USAGE
   llm-usage --dash [options]    Launch the local web dashboard
   llm-usage setup               Interactive setup wizard
   llm-usage setup --check       Check current provider configuration
+  llm-usage add [provider]      Guided provider setup (menu, --list, --help)
 
 OPTIONS
   --watch, --tui   Live TUI — requires an interactive terminal (TTY)
@@ -153,6 +163,7 @@ function buildWrappedAdapters(): IProviderAdapter[] {
   const base: IProviderAdapter[] = [
     new ClaudeAdapter(),
     new CodexAdapter(),
+    new CommandCodeAdapter(),
     new OpenCodeGoAdapter(),
   ];
   return base.map((a) => ({

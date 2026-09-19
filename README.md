@@ -13,11 +13,12 @@
 
 **Supported providers:**
 
-| Provider    | Data source                          | What you see                             |
-| ----------- | ------------------------------------ | ---------------------------------------- |
-| Claude      | `api.anthropic.com/api/oauth/usage`  | 5h / weekly / per-model windows, credits |
-| Codex       | `chatgpt.com/backend-api/wham/usage` | Rate-limit windows, plan type, credits   |
-| OpenCode Go | `opencode.ai/zen/go/v1/usage`        | Rolling / weekly / monthly quotas        |
+| Provider     | Data source                          | What you see                             |
+| ------------ | ------------------------------------ | ---------------------------------------- |
+| Claude       | `api.anthropic.com/api/oauth/usage`  | 5h / weekly / per-model windows, credits |
+| Codex        | `chatgpt.com/backend-api/wham/usage` | Rate-limit windows, plan type, credits   |
+| Command Code | `api.commandcode.ai/alpha/*`         | Plan, quota windows, credit balance      |
+| OpenCode Go  | `opencode.ai/zen/go/v1/usage`        | Rolling / weekly / monthly quotas        |
 
 Zen and OpenRouter stubs are wired but not yet implemented.
 
@@ -64,6 +65,30 @@ llm-usage --dash
 
 ---
 
+## Adding a provider (`llm-usage add`)
+
+`llm-usage add` is a safe guided setup flow. It never asks for, stores, prints, or spawns login for secret values — it only reports whether a provider is configured and prints the official login command plus the exact credential source.
+
+```bash
+llm-usage add               # numbered menu (TTY only): Claude, Codex, Command Code, OpenCode Go
+llm-usage add claude       # claude | codex | command-code | opencode-go (aliases are accepted)
+llm-usage add --list       # providers and configured status
+llm-usage add --help       # add-specific help
+```
+
+If the provider is already configured, `add` reports that and changes nothing (idempotent). Otherwise it prints provider-specific instructions:
+
+- Claude: run `claude`, then choose `/login` (robust across CLI versions)
+- Codex: `codex login` (OAuth flow, not an API key)
+- Command Code: `command-code login` (portable across macOS, Linux, and Windows; optional provider). `cmdc` is the native Windows alias; `cmd` is POSIX-only (on Windows `cmd` is the system shell).
+- OpenCode Go: launch `opencode`, then `/connect` and choose OpenCode Go
+
+Arguments are strict: at most one provider id or flag per invocation. Extras are rejected, `--list` cannot be combined with a provider id, and unknown flags are rejected.
+
+Exit codes: `0` when help/list is shown or the provider is already configured (no changes); `1` when guidance is printed for a missing provider or arguments are invalid.
+
+Outside a TTY, run `llm-usage add <provider-id>` explicitly. Command Code is optional and never affects `setup --check`.
+
 ## Setup details
 
 ### Claude
@@ -83,6 +108,17 @@ Codex credentials are read from the Codex CLI auth store. Log in once:
 ```bash
 codex login
 ```
+
+### Command Code
+
+Command Code usage is read from the read-only account/billing endpoints under `https://api.commandcode.ai/alpha/` (`whoami`, `billing/credits`, `billing/subscriptions`, `usage/summary`). The API key is discovered automatically in this order:
+
+1. `COMMAND_CODE_API_KEY`
+2. The top-level `apiKey` (or `api_key`) in `~/.commandcode/auth.json`
+
+Set `COMMAND_CODE_AUTH_PATH` only when the auth file is stored at a nonstandard location. Command Code is optional: when it is unconfigured, its card reports "Not Configured" without affecting the other providers or the `setup --check` result.
+
+> Alpha endpoint caveat: the `/alpha/*` endpoints are undocumented and may change. Unknown or changed responses are reported as an actionable `PARSE`/`UNAVAILABLE` error on the Command Code card — never as fabricated zero usage. Provider-plan accounts with no rolling subscription windows show credits/balance only. Note that the documented Provider API at `https://api.commandcode.ai/provider/v1` is for model requests, not usage, and this dashboard never calls it.
 
 ### OpenCode Go
 
@@ -107,6 +143,7 @@ llm-usage --json          Print a machine-readable JSON snapshot and exit
 llm-usage --dash          Launch the local web dashboard
 llm-usage setup           Interactive setup wizard
 llm-usage setup --check   Check provider configuration status
+llm-usage add [provider]  Guided provider setup (menu, --list, --help)
 llm-usage --help          Show usage
 ```
 
@@ -143,6 +180,13 @@ OpenCode credential discovery can be adjusted with these environment variables:
 | `OPENCODE_API_KEY`   | OpenCode API key; takes precedence over the auth file |
 | `OPENCODE_AUTH_PATH` | Override path to the OpenCode CLI `auth.json` file    |
 
+Command Code credential discovery can be adjusted with these environment variables:
+
+| Variable                 | Description                                               |
+| ------------------------ | --------------------------------------------------------- |
+| `COMMAND_CODE_API_KEY`   | Command Code API key; takes precedence over the auth file |
+| `COMMAND_CODE_AUTH_PATH` | Override path to the Command Code CLI `auth.json` file    |
+
 **Do not commit credential files or API keys.** Configuration files are written with `0600` permissions on POSIX systems.
 
 ---
@@ -163,6 +207,8 @@ All endpoints are local-only (`http://127.0.0.1:7878`).
 
 The `POST /api/config` endpoint is guarded against cross-origin requests and rejects payloads larger than 8 KB.
 
+The `GET` and `POST` `/api/config` responses include boolean-only `claudeTokenFound`, `codexTokenFound`, `commandCodeTokenFound`, and `openCodeGoTokenFound` fields — credential presence only, never secret values.
+
 ---
 
 ## Architecture
@@ -177,7 +223,7 @@ src/
 ├── core/
 │   ├── types.ts        Pure data contracts (UsageData, QuotaWindow, StatusResponse)
 │   ├── config.ts       Load / validate / save config (~/.llm-usage/config.json)
-│   ├── credentials.ts  Read Claude, Codex, and OpenCode credentials from local auth stores
+│   ├── credentials.ts  Read Claude, Codex, Command Code, and OpenCode credentials from local auth stores
 │   ├── poller.ts       Polling service — interval, backoff, deduplication
 │   ├── aggregator.ts   Parallel fetch across adapters, merge results
 │   ├── redact.ts       Strip secrets from error messages and response bodies
@@ -185,6 +231,7 @@ src/
 ├── providers/
 │   ├── claude.ts       Anthropic OAuth usage API adapter
 │   ├── codex.ts        ChatGPT backend usage API adapter
+│   ├── command-code.ts Command Code alpha account/billing usage API adapter
 │   ├── opencode-go.ts  Official OpenCode Go usage API adapter
 │   ├── openrouter.ts   Stub (Phase 2)
 │   ├── zen.ts          Stub (Phase 2)
@@ -193,7 +240,8 @@ src/
 public/
 ├── index.html          Dashboard shell
 ├── app.js              Frontend logic — fetch, render, settings drawer
-└── styles.css          Dashboard styles
+├── styles.css          Dashboard styles
+└── icons/              Provider icons (`command-code.svg` is a local fallback mark, not supplied artwork)
 ```
 
 ### Key design decisions

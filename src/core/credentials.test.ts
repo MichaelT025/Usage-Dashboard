@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getClaudeToken,
   getCodexToken,
+  getCommandCodeToken,
   getOpenCodeGoToken,
 } from './credentials.js';
 
@@ -12,6 +13,8 @@ const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
 const originalCodexHome = process.env.CODEX_HOME;
 const originalOpenCodeApiKey = process.env.OPENCODE_API_KEY;
 const originalOpenCodeAuthPath = process.env.OPENCODE_AUTH_PATH;
+const originalCommandCodeApiKey = process.env.COMMAND_CODE_API_KEY;
+const originalCommandCodeAuthPath = process.env.COMMAND_CODE_AUTH_PATH;
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 
 let tempRoot: string;
@@ -38,6 +41,8 @@ beforeEach(() => {
   );
   delete process.env.OPENCODE_API_KEY;
   delete process.env.OPENCODE_AUTH_PATH;
+  delete process.env.COMMAND_CODE_API_KEY;
+  delete process.env.COMMAND_CODE_AUTH_PATH;
   vi.restoreAllMocks();
 });
 
@@ -55,6 +60,14 @@ afterEach(() => {
   if (originalOpenCodeAuthPath === undefined)
     delete process.env.OPENCODE_AUTH_PATH;
   else process.env.OPENCODE_AUTH_PATH = originalOpenCodeAuthPath;
+
+  if (originalCommandCodeApiKey === undefined)
+    delete process.env.COMMAND_CODE_API_KEY;
+  else process.env.COMMAND_CODE_API_KEY = originalCommandCodeApiKey;
+
+  if (originalCommandCodeAuthPath === undefined)
+    delete process.env.COMMAND_CODE_AUTH_PATH;
+  else process.env.COMMAND_CODE_AUTH_PATH = originalCommandCodeAuthPath;
 
   if (originalPlatform)
     Object.defineProperty(process, 'platform', originalPlatform);
@@ -171,6 +184,42 @@ describe('getOpenCodeGoToken', () => {
       .mockImplementation(() => undefined);
 
     await expect(getOpenCodeGoToken()).resolves.toBeNull();
+    expect(JSON.stringify(log.mock.calls)).not.toContain(fakeToken);
+    expect(JSON.stringify(error.mock.calls)).not.toContain(fakeToken);
+  });
+});
+
+describe('getCommandCodeToken', () => {
+  it('resolves the apiKey from the Command Code auth file', async () => {
+    const authPath = path.join(tempRoot, 'commandcode-auth.json');
+    process.env.COMMAND_CODE_AUTH_PATH = authPath;
+    writeJson(authPath, { apiKey: 'COMMAND-CODE-FIXTURE' });
+
+    await expect(getCommandCodeToken()).resolves.toBe('COMMAND-CODE-FIXTURE');
+  });
+
+  it('prefers COMMAND_CODE_API_KEY over the auth file', async () => {
+    const authPath = path.join(tempRoot, 'commandcode-auth.json');
+    process.env.COMMAND_CODE_AUTH_PATH = authPath;
+    process.env.COMMAND_CODE_API_KEY = 'COMMAND-CODE-ENV-FIXTURE';
+    writeJson(authPath, { apiKey: 'COMMAND-CODE-FILE-FIXTURE' });
+
+    await expect(getCommandCodeToken()).resolves.toBe(
+      'COMMAND-CODE-ENV-FIXTURE',
+    );
+  });
+
+  it('returns null without exposing malformed credential contents', async () => {
+    const authPath = path.join(tempRoot, 'commandcode-auth.json');
+    const fakeToken = 'cc-DO-NOT-LEAK';
+    process.env.COMMAND_CODE_AUTH_PATH = authPath;
+    fs.writeFileSync(authPath, `{ "apiKey": "${fakeToken}" `, 'utf8');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    await expect(getCommandCodeToken()).resolves.toBeNull();
     expect(JSON.stringify(log.mock.calls)).not.toContain(fakeToken);
     expect(JSON.stringify(error.mock.calls)).not.toContain(fakeToken);
   });

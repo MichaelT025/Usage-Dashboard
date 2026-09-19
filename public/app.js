@@ -174,7 +174,7 @@ function renderWindow(win) {
         </div>
         <span class="window-pct">${pct}% used</span>
       </div>
-      <span class="window-countdown" data-resets-at="${escHtml(win.resetsAt)}">…</span>
+      <span class="window-countdown" data-resets-at="${escHtml(win.resetsAt ?? '')}">${win.resetsAt === null ? 'Starts on first use' : '…'}</span>
     </div>`;
 }
 
@@ -363,6 +363,8 @@ function initDrawer() {
           <span class="${s.codexTokenFound ? 'status-ok' : 'status-warn'}">${s.codexTokenFound ? '✓ configured' : '✗ run `codex login`'}</span></div>
         <div class="status-row"><span>OpenCode Go</span>
           <span class="${s.openCodeGoTokenFound ? 'status-ok' : 'status-warn'}">${s.openCodeGoTokenFound ? '✓ API key found' : '✗ use `/connect` in OpenCode'}</span></div>
+        <div class="status-row"><span>Command Code</span>
+          <span class="${s.commandCodeTokenFound ? 'status-ok' : 'status-warn'}">${s.commandCodeTokenFound ? '✓ configured' : '✗ set COMMAND_CODE_API_KEY'}</span></div>
       </div>
       <div class="settings-section">
         <h3>Refresh Interval</h3>

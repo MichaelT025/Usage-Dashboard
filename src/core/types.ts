@@ -6,7 +6,7 @@
 
 /** Supported provider IDs */
 export type ProviderId =
-  'claude' | 'codex' | 'opencode-go' | 'zen' | 'openrouter';
+  'claude' | 'codex' | 'opencode-go' | 'zen' | 'openrouter' | 'command-code';
 
 /**
  * Provider lifecycle states:
@@ -46,7 +46,7 @@ export interface QuotaWindow {
   label: string; // e.g. "5h", "Weekly", "Monthly"
   windowSeconds: number; // duration of this window
   usedPercent: number; // 0–100
-  resetsAt: string; // ISO 8601
+  resetsAt: string | null; // ISO 8601; null when a rolling window has not started
 }
 
 /**

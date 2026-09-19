@@ -1,9 +1,15 @@
 import os from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { claudeCredentialsPath, codexAuthPath, configPath } from './paths.js';
+import {
+  claudeCredentialsPath,
+  codexAuthPath,
+  commandCodeAuthPath,
+  configPath,
+} from './paths.js';
 
 const originalClaude = process.env.CLAUDE_CONFIG_DIR;
 const originalCodex = process.env.CODEX_HOME;
+const originalCommandCodeAuth = process.env.COMMAND_CODE_AUTH_PATH;
 const originalHome = process.env.HOME;
 
 afterEach(() => {
@@ -12,6 +18,10 @@ afterEach(() => {
 
   if (originalCodex === undefined) delete process.env.CODEX_HOME;
   else process.env.CODEX_HOME = originalCodex;
+
+  if (originalCommandCodeAuth === undefined)
+    delete process.env.COMMAND_CODE_AUTH_PATH;
+  else process.env.COMMAND_CODE_AUTH_PATH = originalCommandCodeAuth;
 
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
@@ -53,6 +63,22 @@ describe('paths', () => {
     process.env.CODEX_HOME = '/tmp/codex';
     expect(
       codexAuthPath().replace(/\\/g, '/').endsWith('/tmp/codex/auth.json'),
+    ).toBe(true);
+  });
+
+  it('commandCodeAuthPath supports default and env override', () => {
+    delete process.env.COMMAND_CODE_AUTH_PATH;
+    expect(
+      commandCodeAuthPath()
+        .replace(/\\/g, '/')
+        .endsWith('.commandcode/auth.json'),
+    ).toBe(true);
+
+    process.env.COMMAND_CODE_AUTH_PATH = '/tmp/commandcode-auth.json';
+    expect(
+      commandCodeAuthPath()
+        .replace(/\\/g, '/')
+        .endsWith('/tmp/commandcode-auth.json'),
     ).toBe(true);
   });
 

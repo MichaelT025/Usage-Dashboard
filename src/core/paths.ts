@@ -49,3 +49,13 @@ export function opencodeAuthPath(): string {
   if (override) return path.resolve(override);
   return path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
 }
+
+/**
+ * Path to the Command Code CLI auth file.
+ * Respects COMMAND_CODE_AUTH_PATH env override (used in tests).
+ */
+export function commandCodeAuthPath(): string {
+  const override = process.env['COMMAND_CODE_AUTH_PATH'];
+  if (override) return path.resolve(override);
+  return path.join(os.homedir(), '.commandcode', 'auth.json');
+}

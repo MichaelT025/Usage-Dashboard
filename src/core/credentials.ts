@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import {
   claudeCredentialsPath,
   codexAuthPath,
+  commandCodeAuthPath,
   opencodeAuthPath,
 } from './paths.js';
 import { redactSecrets, safeErrorMessage } from './redact.js';
@@ -140,6 +141,24 @@ export async function getOpenCodeGoToken(): Promise<string | null> {
         return key;
       }
     }
+  } catch (err) {
+    void safeErrorMessage(err);
+    void redactSecrets(err);
+  }
+  return null;
+}
+
+/** Command Code API key: COMMAND_CODE_API_KEY env first, then ~/.commandcode/auth.json apiKey. */
+export async function getCommandCodeToken(): Promise<string | null> {
+  const environmentKey = process.env['COMMAND_CODE_API_KEY']?.trim();
+  if (environmentKey) return environmentKey;
+  try {
+    const filePath = commandCodeAuthPath();
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const json = JSON.parse(raw);
+    const key = json['apiKey'] ?? json['api_key'];
+    if (typeof key === 'string' && key.trim().length > 0) return key.trim();
   } catch (err) {
     void safeErrorMessage(err);
     void redactSecrets(err);
