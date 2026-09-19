@@ -27,6 +27,11 @@ const SECRET_PATTERNS: RegExp[] = [
   /sk-[A-Za-z0-9\-_]+/g,
   /Fe26\.2\*\*[^\s"']*/g,
   /Bearer [^\s"']+/g,
+  /\bcc-[A-Za-z0-9\-_.]{8,}/g,
+  /\bcc_[A-Za-z0-9\-_.]{8,}/g,
+  /\bcmd-[A-Za-z0-9\-_.]{8,}/g,
+  /\bcmd_[A-Za-z0-9\-_.]{8,}/g,
+  /\buser_[A-Za-z0-9\-_.]{16,}/g,
 ];
 
 function redactString(s: string): string {

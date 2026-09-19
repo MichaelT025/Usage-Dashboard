@@ -40,6 +40,33 @@ describe('redactSecrets', () => {
     expect(redactSecrets(42)).toBe(42);
     expect(redactSecrets(null)).toBe(null);
   });
+
+  it('redacts Command Code apiKey fields and cc- tokens', () => {
+    const result = redactSecrets({
+      apiKey: 'cc-live-fixture',
+      note: 'auth cc-abc123XYZ',
+    }) as Record<string, unknown>;
+
+    expect(JSON.stringify(result)).not.toContain('cc-live-fixture');
+    expect(JSON.stringify(result)).not.toContain('cc-abc123XYZ');
+  });
+
+  it('redacts user_/cc_/cmd_ key variants with bounded matching', () => {
+    const secrets = {
+      userKey: 'user_abcdefghijklmnop1234',
+      ccUnderscore: 'cc_abc123XYZ456',
+      cmdDash: 'cmd-abc123XYZ456',
+      cmdUnderscore: 'cmd_xyz987654321',
+    };
+    const result = redactSecrets(secrets) as Record<string, unknown>;
+    for (const secret of Object.values(secrets)) {
+      expect(JSON.stringify(result)).not.toContain(secret);
+    }
+    expect(JSON.stringify(result)).toContain('[REDACTED]');
+    // Bounded matching avoids redacting short fragments.
+    expect(redactSecrets('cc-x')).toBe('cc-x');
+    expect(redactSecrets('user_short')).toBe('user_short');
+  });
 });
 
 describe('safeErrorMessage', () => {
@@ -50,5 +77,16 @@ describe('safeErrorMessage', () => {
 
     expect(message).toContain('[REDACTED]');
     expect(message).not.toContain('sk-ant-fake-token');
+  });
+
+  it('redacts real key prefixes from error messages', () => {
+    const userKey = 'user_abcdefghijklmnop1234';
+    const ccKey = 'cc_abc123XYZ45678';
+    const cmdKey = 'cmd-abc123XYZ45678';
+    for (const secret of [userKey, ccKey, cmdKey]) {
+      const message = safeErrorMessage(new Error(`request failed: ${secret}`));
+      expect(message).not.toContain(secret);
+      expect(message).toContain('[REDACTED]');
+    }
   });
 });

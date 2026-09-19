@@ -86,8 +86,8 @@ export function renderWindowRow(win: QuotaWindow, opts: RenderOpts): string {
   const pct = Math.min(100, Math.max(0, win.usedPercent));
   const pctStr = `${pct}% used`.padStart(8); // e.g. "  42% used"
 
-  const delta = new Date(win.resetsAt).getTime() - Date.now();
-  const countdown =
+  const delta = win.resetsAt === null ? null : new Date(win.resetsAt).getTime() - Date.now();
+  const countdown = delta === null ? 'Starts on first use' :
     delta <= 0 ? 'resetting now' : `Resets in ${formatDuration(delta)}`;
 
   const colorCode = pct >= 100 ? RED : pct >= 80 ? YELLOW : GREEN;
@@ -126,7 +126,7 @@ export function renderProviderBlock(p: UsageData, opts: RenderOpts): string {
     if (p.credits) {
       const parts: string[] = [];
       if (p.credits.balanceUsd != null)
-        parts.push(`Balance: $${p.credits.balanceUsd.toFixed(2)}`);
+        parts.push(`$${p.credits.balanceUsd.toFixed(2)}`);
       if (p.credits.valueUsd != null)
         parts.push(`Used: $${p.credits.valueUsd.toFixed(2)}`);
       if (parts.length)

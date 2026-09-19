@@ -1,0 +1,16 @@
+{
+  "whoami": { "unexpected": "shape" },
+  "credits": {
+    "credits": {
+      "monthlyCredits": "lots",
+      "purchasedCredits": null,
+      "freeCredits": "none"
+    },
+    "windowLimits": {
+      "fiveHour": { "used": "lots", "cap": null, "resetAt": "never" },
+      "weekly": { "used": -1, "cap": 0, "resetAt": null }
+    }
+  },
+  "subscriptions": { "data": null },
+  "usage": { "totalCost": "lots", "totalCount": "many" }
+}
