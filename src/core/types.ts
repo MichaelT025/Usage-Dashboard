@@ -57,6 +57,12 @@ export interface CreditsInfo {
   label: string; // e.g. "Extra usage", "Balance"
   valueUsd?: number; // amount consumed (if known)
   balanceUsd?: number; // remaining balance (if known)
+  /** Command Code plan pool balances, preserved independently when available. */
+  monthlyCredits?: number;
+  purchasedCredits?: number;
+  freeCredits?: number;
+  /** Spend reported by a provider (separate from remaining credit pools). */
+  spendUsd?: number;
 }
 
 /**

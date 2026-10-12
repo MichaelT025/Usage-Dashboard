@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWindowRow } from '../render.js';
+import { renderProviderBlock, renderWindowRow } from '../render.js';
 import { getCommandCodeToken } from '../core/credentials.js';
 import {
   COMMAND_CODE_ENDPOINTS,
@@ -259,37 +259,83 @@ describe('parseCommandCodeWindows', () => {
 });
 
 describe('live inactive GOAT quota response', () => {
-  const credits = { credits: { monthlyCredits: 70 }, windowLimits: {
-    fiveHour: { used: 0, cap: 14, resetAt: 0 },
-    weekly: { used: 0, cap: 35, resetAt: 0 },
-  } };
-  const subscriptions = { data: { currentPeriodStart: '2026-09-19T22:58:48.000Z', currentPeriodEnd: '2026-10-19T22:58:48.000Z' } };
+  const credits = {
+    credits: { monthlyCredits: 70 },
+    windowLimits: {
+      fiveHour: { used: 0, cap: 14, resetAt: 0 },
+      weekly: { used: 0, cap: 35, resetAt: 0 },
+    },
+  };
+  const subscriptions = {
+    data: {
+      currentPeriodStart: '2026-09-19T22:58:48.000Z',
+      currentPeriodEnd: '2026-10-19T22:58:48.000Z',
+    },
+  };
   it('keeps inactive rolling windows without invented reset dates', () => {
     expect(parseCommandCodeWindows(credits)).toEqual([
       { label: '5h', windowSeconds: 18000, usedPercent: 0, resetsAt: null },
-      { label: 'Weekly', windowSeconds: 604800, usedPercent: 0, resetsAt: null },
+      {
+        label: 'Weekly',
+        windowSeconds: 604800,
+        usedPercent: 0,
+        resetsAt: null,
+      },
     ]);
-    expect(parseCommandCodeWindow({ used: 2, cap: 14, resetAt: 0 }, '5h', 18000)).toBeNull();
+    expect(
+      parseCommandCodeWindow({ used: 2, cap: 14, resetAt: 0 }, '5h', 18000),
+    ).toBeNull();
   });
   it('uses included credits consumed, not total cost or purchased credits', () => {
-    expect(parseCommandCodeMonthly(credits, subscriptions, { totalMonthlyCredits: 0, periodBasis: 'billing-period' })).toMatchObject({ label: 'Monthly', usedPercent: 0, resetsAt: '2026-10-19T22:58:48.000Z' });
-    expect(parseCommandCodeMonthly({ credits: { monthlyCredits: 56, purchasedCredits: 100 } }, subscriptions, { totalMonthlyCredits: 14, totalCost: 99, periodBasis: 'billing-period' })).toMatchObject({ usedPercent: 20 });
-    expect(parseCommandCodeMonthly(credits, subscriptions, { totalCost: 0 })).toBeNull();
-    expect(parseCommandCodeMonthly(credits, subscriptions, { totalMonthlyCredits: 0, periodBasis: 'all-time' })).toBeNull();
+    expect(
+      parseCommandCodeMonthly(credits, subscriptions, {
+        totalMonthlyCredits: 0,
+        periodBasis: 'billing-period',
+      }),
+    ).toMatchObject({
+      label: 'Monthly',
+      usedPercent: 0,
+      resetsAt: '2026-10-19T22:58:48.000Z',
+    });
+    expect(
+      parseCommandCodeMonthly(
+        { credits: { monthlyCredits: 56, purchasedCredits: 100 } },
+        subscriptions,
+        {
+          totalMonthlyCredits: 14,
+          totalCost: 99,
+          periodBasis: 'billing-period',
+        },
+      ),
+    ).toMatchObject({ usedPercent: 20 });
+    expect(
+      parseCommandCodeMonthly(credits, subscriptions, { totalCost: 0 }),
+    ).toBeNull();
+    expect(
+      parseCommandCodeMonthly(credits, subscriptions, {
+        totalMonthlyCredits: 0,
+        periodBasis: 'all-time',
+      }),
+    ).toBeNull();
   });
 });
 
 describe('parseCommandCodeCredits', () => {
-  it('aggregates credit pools and maps summary totalCost', () => {
-    // CreditsInfo cannot distinguish pools, so monthly + purchased + free
-    // are reported as one aggregate balance (100 + 25 + 12.5).
+  it('preserves distinct pools, aggregates once, and reports totalCost as spend', () => {
     expect(
       parseCommandCodeCredits(
         (happy as Record<string, unknown>)['credits'],
         (happy as Record<string, unknown>)['subscriptions'],
         (happy as Record<string, unknown>)['usage'],
       ),
-    ).toMatchObject({ label: 'Balance', balanceUsd: 137.5, valueUsd: 3.25 });
+    ).toMatchObject({
+      label: 'Balance',
+      balanceUsd: 137.5,
+      monthlyCredits: 100,
+      purchasedCredits: 25,
+      freeCredits: 12.5,
+      spendUsd: 3.25,
+    });
     expect(
       parseCommandCodeCredits(
         (happy as Record<string, unknown>)['credits'],
@@ -320,6 +366,94 @@ describe('parseCommandCodeCredits', () => {
       ),
     ).toBeUndefined();
   });
+
+  it('prefers camelCase aliases and never adds a snake_case duplicate', () => {
+    expect(
+      parseCommandCodeCredits(
+        {
+          credits: {
+            monthlyCredits: 56,
+            monthly_credits: 56,
+            purchasedCredits: 100,
+          },
+        },
+        null,
+      ),
+    ).toMatchObject({
+      monthlyCredits: 56,
+      purchasedCredits: 100,
+      balanceUsd: 156,
+    });
+  });
+
+  it('keeps zero and leaves missing or invalid pool values unknown', () => {
+    const result = parseCommandCodeCredits(
+      {
+        credits: {
+          monthlyCredits: 0,
+          purchased_credits: 'bad',
+          free_credits: 7,
+        },
+      },
+      null,
+    );
+    expect(result).toMatchObject({
+      monthlyCredits: 0,
+      freeCredits: 7,
+      balanceUsd: 7,
+    });
+    expect(result).not.toHaveProperty('purchasedCredits');
+    expect(
+      parseCommandCodeCredits(
+        { credits: { monthlyCredits: 'bad', monthly_credits: 9 } },
+        null,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe('Command Code credits rendering', () => {
+  it('shows plan and extra pools separately and labels spend explicitly', () => {
+    const output = renderProviderBlock(
+      {
+        providerId: 'command-code',
+        displayName: 'Command Code',
+        state: 'ok',
+        windows: [],
+        fetchedAt: '2026-10-12T00:00:00.000Z',
+        credits: {
+          label: 'Balance',
+          balanceUsd: 156,
+          monthlyCredits: 56,
+          purchasedCredits: 100,
+          freeCredits: 0,
+          spendUsd: 2.5,
+        },
+      },
+      { cols: 80, color: false },
+    );
+    expect(output).toContain('Plan credits');
+    expect(output).toContain('Monthly: $56.00');
+    expect(output).toContain('Free: $0.00');
+    expect(output).toContain('Extra/API credits: $100.00');
+    expect(output).toContain('Spend: $2.50');
+    expect(output).not.toContain('Balance: $156.00');
+  });
+
+  it('keeps legacy single-balance and generic provider rendering unchanged', () => {
+    const output = renderProviderBlock(
+      {
+        providerId: 'openrouter',
+        displayName: 'OpenRouter',
+        state: 'ok',
+        windows: [],
+        fetchedAt: '2026-10-12T00:00:00.000Z',
+        credits: { label: 'Balance', balanceUsd: 10, valueUsd: 3 },
+      },
+      { cols: 80, color: false },
+    );
+    expect(output).toContain('Balance: $10.00 · Used: $3.00');
+  });
 });
 
 describe('CommandCodeAdapter', () => {
@@ -338,7 +472,7 @@ describe('CommandCodeAdapter', () => {
     expect(result.state).toBe('ok');
     expect(result.plan).toBe('Go');
     expect(result.windows).toHaveLength(2);
-    expect(result.credits).toMatchObject({ balanceUsd: 137.5, valueUsd: 3.25 });
+    expect(result.credits).toMatchObject({ balanceUsd: 137.5, spendUsd: 3.25 });
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -365,7 +499,9 @@ describe('CommandCodeAdapter', () => {
       }),
     );
     // A single shared AbortSignal bounds the whole poll so it cannot hang.
-    const signals = fetchMock.mock.calls.map((call) => (call[1] as { signal?: unknown })?.signal);
+    const signals = fetchMock.mock.calls.map(
+      (call) => (call[1] as { signal?: unknown })?.signal,
+    );
     expect(signals).toHaveLength(4);
     for (const signal of signals) {
       expect(signal).toBeInstanceOf(AbortSignal);
@@ -415,14 +551,37 @@ describe('CommandCodeAdapter', () => {
     vi.mocked(getCommandCodeToken).mockResolvedValue(TOKEN);
     stubSequence([
       jsonResponse({}),
-      jsonResponse({ credits: { monthlyCredits: 70, purchasedCredits: 0, freeCredits: 0 }, windowLimits: { fiveHour: { used: 0, cap: 14, resetAt: 0 }, weekly: { used: 0, cap: 35, resetAt: 0 } } }),
-      jsonResponse({ data: { planId: 'individual-goat', currentPeriodStart: '2026-09-19T22:58:48.000Z', currentPeriodEnd: '2026-10-19T22:58:48.000Z' } }),
-      jsonResponse({ totalMonthlyCredits: 0, totalCost: 0, periodBasis: 'billing-period' }),
+      jsonResponse({
+        credits: { monthlyCredits: 70, purchasedCredits: 0, freeCredits: 0 },
+        windowLimits: {
+          fiveHour: { used: 0, cap: 14, resetAt: 0 },
+          weekly: { used: 0, cap: 35, resetAt: 0 },
+        },
+      }),
+      jsonResponse({
+        data: {
+          planId: 'individual-goat',
+          currentPeriodStart: '2026-09-19T22:58:48.000Z',
+          currentPeriodEnd: '2026-10-19T22:58:48.000Z',
+        },
+      }),
+      jsonResponse({
+        totalMonthlyCredits: 0,
+        totalCost: 0,
+        periodBasis: 'billing-period',
+      }),
     ]);
     const result = await new CommandCodeAdapter().fetch();
     expect(result.state).toBe('ok');
-    expect(result.windows.map(w => w.label)).toEqual(['5h', 'Weekly', 'Monthly']);
-    const output = renderWindowRow(result.windows[0]!, { cols: 80, color: false });
+    expect(result.windows.map((w) => w.label)).toEqual([
+      '5h',
+      'Weekly',
+      'Monthly',
+    ]);
+    const output = renderWindowRow(result.windows[0]!, {
+      cols: 80,
+      color: false,
+    });
     expect(output).toContain('Starts on first use');
     expect(output).not.toContain('NaN');
   });
@@ -568,23 +727,21 @@ describe('CommandCodeAdapter', () => {
     vi.mocked(getCommandCodeToken).mockResolvedValue(TOKEN);
     vi.useFakeTimers();
     try {
-      const fetchMock = vi
-        .fn()
-        .mockImplementation(
-          (_url: string, init?: { signal?: AbortSignal }) =>
-            new Promise((_resolve, reject) => {
-              const signal = init?.signal;
-              if (signal?.aborted) {
-                reject(new DOMException('aborted', 'AbortError'));
-                return;
-              }
-              signal?.addEventListener(
-                'abort',
-                () => reject(new DOMException('aborted', 'AbortError')),
-                { once: true },
-              );
-            }),
-        );
+      const fetchMock = vi.fn().mockImplementation(
+        (_url: string, init?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            const signal = init?.signal;
+            if (signal?.aborted) {
+              reject(new DOMException('aborted', 'AbortError'));
+              return;
+            }
+            signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      );
       vi.stubGlobal('fetch', fetchMock);
 
       const pending = new CommandCodeAdapter().fetch();
@@ -594,7 +751,8 @@ describe('CommandCodeAdapter', () => {
       expect(result.state).toBe('unavailable');
       expect(result.error?.code).toBe('NETWORK');
       expect(fetchMock).toHaveBeenCalled();
-      const signal = (fetchMock.mock.calls[0]?.[1] as { signal?: unknown })?.signal;
+      const signal = (fetchMock.mock.calls[0]?.[1] as { signal?: unknown })
+        ?.signal;
       expect(signal).toBeInstanceOf(AbortSignal);
     } finally {
       vi.useRealTimers();

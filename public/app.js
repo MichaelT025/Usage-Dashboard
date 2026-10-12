@@ -179,11 +179,38 @@ function renderWindow(win) {
 }
 
 function renderCredits(credits) {
+  const hasCommandCodePools =
+    credits.monthlyCredits != null ||
+    credits.purchasedCredits != null ||
+    credits.freeCredits != null;
+  if (hasCommandCodePools) {
+    const planParts = [];
+    if (credits.monthlyCredits != null)
+      planParts.push(`Monthly: $${credits.monthlyCredits.toFixed(2)}`);
+    if (credits.freeCredits != null)
+      planParts.push(`Free: $${credits.freeCredits.toFixed(2)}`);
+    const rows = [];
+    if (planParts.length)
+      rows.push(
+        `<p class="credits-row">Plan credits: ${planParts.join(' · ')}</p>`,
+      );
+    if (credits.purchasedCredits != null)
+      rows.push(
+        `<p class="credits-row">Extra/API credits: $${credits.purchasedCredits.toFixed(2)}</p>`,
+      );
+    if (credits.spendUsd != null)
+      rows.push(
+        `<p class="credits-row">Spend: $${credits.spendUsd.toFixed(2)}</p>`,
+      );
+    return rows.join('');
+  }
   const parts = [];
   if (credits.balanceUsd != null)
     parts.push(`$${credits.balanceUsd.toFixed(2)}`);
   if (credits.valueUsd != null)
     parts.push(`Used: $${credits.valueUsd.toFixed(2)}`);
+  if (credits.spendUsd != null)
+    parts.push(`Spend: $${credits.spendUsd.toFixed(2)}`);
   return parts.length
     ? `<p class="credits-row">${escHtml(credits.label)}: ${parts.join(' · ')}</p>`
     : '';
