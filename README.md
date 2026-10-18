@@ -130,6 +130,8 @@ OpenCode Go usage is read from its official usage API. The API key is discovered
 
 To configure the key through OpenCode, run `/connect` in the OpenCode TUI, select **OpenCode Go**, and paste the key from the OpenCode console. Set `OPENCODE_AUTH_PATH` only when the auth file is stored at a nonstandard location.
 
+If the API reports `api_key_expired`, create a **new API key** in the OpenCode Console and paste that new key through `/connect` → OpenCode Go. Signing in again does not renew an expired API key. If `OPENCODE_API_KEY` is set, replace or unset it too: it takes precedence over the auth store. The Docker deployment mounts the OpenCode credential directory read-only so atomic auth-file replacements remain visible without restarting the dashboard.
+
 The endpoint reports Go subscription quotas only. It does not report ordinary Zen pay-as-you-go spending or the Zen credit balance.
 
 ---

@@ -148,6 +148,46 @@ describe('OpenCodeGoAdapter', () => {
     expect(JSON.stringify(result)).not.toContain(TOKEN);
   });
 
+  it('explains that an expired API key must be replaced, not renewed by login', async () => {
+    vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+    stubJson(
+      {
+        error: {
+          type: 'authentication_error',
+          code: 'api_key_expired',
+          message: `Expired key: ${TOKEN}`,
+        },
+      },
+      401,
+    );
+
+    const result = await new OpenCodeGoAdapter().fetch();
+
+    expect(result.state).toBe('unavailable');
+    expect(result.error?.code).toBe('AUTH_EXPIRED');
+    expect(result.error?.message).toBe('OpenCode API key has expired');
+    expect(result.error?.hint).toContain('Create a new API key');
+    expect(result.error?.hint).toContain('OPENCODE_API_KEY');
+    expect(result.error?.hint).toContain('Signing in again does not renew');
+    expect(JSON.stringify(result)).not.toContain(TOKEN);
+    expect(result.windows).toEqual([]);
+  });
+
+  it.each(['Unauthorized', '{', 'null', '{"error":null}'])(
+    'handles malformed or non-JSON 401 responses safely: %s',
+    async (body) => {
+      vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
+      stubText(body, 401);
+
+      const result = await new OpenCodeGoAdapter().fetch();
+
+      expect(result.error?.code).toBe('AUTH_EXPIRED');
+      expect(result.error?.message).toBe('OpenCode API key was rejected');
+      expect(result.error?.hint).toContain('Create a new API key');
+      expect(JSON.stringify(result)).not.toContain(TOKEN);
+    },
+  );
+
   it('maps a missing Go subscription to NOT_ENTITLED', async () => {
     vi.mocked(getOpenCodeGoToken).mockResolvedValue(TOKEN);
     stubJson(

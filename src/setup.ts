@@ -82,6 +82,7 @@ export const ADD_PROVIDERS: readonly AddProviderInfo[] = [
     loginSteps: [
       'Launch `opencode`.',
       'Run `/connect`, choose OpenCode Go, and paste the key from the OpenCode console.',
+      'If the key has expired, create a new API key in the OpenCode Console first. Signing in again does not renew it. Replace OPENCODE_API_KEY too if set; it overrides the auth file.',
     ],
     optional: false,
   },

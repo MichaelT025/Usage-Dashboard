@@ -122,11 +122,24 @@ export class OpenCodeGoAdapter implements IProviderAdapter {
     }
 
     if (res.status === 401) {
+      let expired = false;
+      try {
+        const body: unknown = await res.json();
+        expired =
+          isRecord(body) &&
+          isRecord(body['error']) &&
+          body['error']['code'] === 'api_key_expired';
+      } catch {
+        // Non-JSON errors still need actionable API-key replacement guidance.
+      }
+
       return errorUsage(
         {
           code: 'AUTH_EXPIRED',
-          message: 'OpenCode API key was rejected',
-          hint: 'Reconnect OpenCode Go using `/connect` in OpenCode',
+          message: expired
+            ? 'OpenCode API key has expired'
+            : 'OpenCode API key was rejected',
+          hint: 'Create a new API key in the OpenCode Console, then paste it via `/connect` → OpenCode Go (or replace OPENCODE_API_KEY if set). Signing in again does not renew an expired key.',
         },
         fetchedAt,
       );

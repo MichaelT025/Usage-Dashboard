@@ -158,6 +158,23 @@ describe('getOpenCodeGoToken', () => {
     await expect(getOpenCodeGoToken()).resolves.toBe('OPENCODE-SHARED-FIXTURE');
   });
 
+  it('re-reads the Go key after an atomic auth-file replacement', async () => {
+    const authPath = path.join(tempRoot, 'opencode-auth.json');
+    process.env.OPENCODE_AUTH_PATH = authPath;
+    writeJson(authPath, {
+      'opencode-go': { type: 'api', key: 'OPENCODE-OLD-FIXTURE' },
+    });
+    await expect(getOpenCodeGoToken()).resolves.toBe('OPENCODE-OLD-FIXTURE');
+
+    const replacement = `${authPath}.new`;
+    writeJson(replacement, {
+      'opencode-go': { type: 'api', key: 'OPENCODE-NEW-FIXTURE' },
+    });
+    fs.renameSync(replacement, authPath);
+
+    await expect(getOpenCodeGoToken()).resolves.toBe('OPENCODE-NEW-FIXTURE');
+  });
+
   it('prefers OPENCODE_API_KEY over the auth store', async () => {
     const authPath = path.join(tempRoot, 'opencode-auth.json');
     process.env.OPENCODE_AUTH_PATH = authPath;

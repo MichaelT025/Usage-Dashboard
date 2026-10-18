@@ -13,7 +13,7 @@ services:
       # Mount the directory so atomic credential-file replacements remain visible.
       - ${HOME}/.claude:/home/node/.claude:ro
       - ${HOME}/.codex/auth.json:/home/node/.codex/auth.json:ro
-      - ${HOME}/.local/share/opencode/auth.json:/home/node/.local/share/opencode/auth.json:ro
+      - ${HOME}/.local/share/opencode:/home/node/.local/share/opencode:ro
     healthcheck:
       test:
         [
