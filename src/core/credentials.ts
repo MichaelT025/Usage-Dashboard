@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import {
   claudeCredentialsPath,
   codexAuthPath,
   commandCodeAuthPath,
   opencodeAuthPath,
+  opencodeDbPath,
 } from './paths.js';
 import { redactSecrets, safeErrorMessage } from './redact.js';
 
@@ -118,12 +120,48 @@ export async function getCodexToken(): Promise<{
 
 /**
  * Resolve an API key for the OpenCode Go usage endpoint.
- * Priority: OPENCODE_API_KEY, then opencode-go/opencode entries in the OpenCode CLI auth store.
+ * Priority: explicit API key, explicit legacy auth path, v2 active account, v1 JSON.
+ * Once a v2 database exists it is authoritative: never resurrect legacy keys after logout.
  */
 export async function getOpenCodeGoToken(): Promise<string | null> {
   const environmentKey = process.env['OPENCODE_API_KEY']?.trim();
   if (environmentKey) return environmentKey;
   try {
+    const dbPath = opencodeDbPath();
+    if (!process.env['OPENCODE_AUTH_PATH'] && fs.existsSync(dbPath)) {
+      // Lazy native loading keeps legacy-only use free of SQLite startup warnings.
+      // createRequire also supports test/build tools predating the node:sqlite builtin.
+      const { DatabaseSync } = createRequire(import.meta.url)(
+        'node:sqlite',
+      ) as typeof import('node:sqlite');
+      const db = new DatabaseSync(dbPath, { readOnly: true });
+      try {
+        db.exec('PRAGMA busy_timeout=1000');
+        const row = db
+          .prepare(
+            `
+          SELECT value FROM credential
+          WHERE integration_id IN ('opencode-go', 'opencode') AND active = 1
+          ORDER BY CASE integration_id WHEN 'opencode-go' THEN 0 ELSE 1 END,
+                   time_updated DESC
+          LIMIT 1
+        `,
+          )
+          .get();
+        if (!row || typeof row['value'] !== 'string') return null;
+        const value: unknown = JSON.parse(row['value']);
+        if (!value || typeof value !== 'object') return null;
+        const entry = value as Record<string, unknown>;
+        const key = entry['key'];
+        // V2 uses type "key", unlike the legacy JSON store's type "api".
+        return entry['type'] === 'key' && typeof key === 'string' && key.trim()
+          ? key.trim()
+          : null;
+      } finally {
+        db.close();
+      }
+    }
+
     const filePath = opencodeAuthPath();
     if (!fs.existsSync(filePath)) return null;
 
