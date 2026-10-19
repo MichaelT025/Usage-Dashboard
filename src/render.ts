@@ -86,9 +86,16 @@ export function renderWindowRow(win: QuotaWindow, opts: RenderOpts): string {
   const pct = Math.min(100, Math.max(0, win.usedPercent));
   const pctStr = `${pct}% used`.padStart(8); // e.g. "  42% used"
 
-  const delta = win.resetsAt === null ? null : new Date(win.resetsAt).getTime() - Date.now();
-  const countdown = delta === null ? 'Starts on first use' :
-    delta <= 0 ? 'resetting now' : `Resets in ${formatDuration(delta)}`;
+  const delta =
+    win.resetsAt === null
+      ? null
+      : new Date(win.resetsAt).getTime() - Date.now();
+  const countdown =
+    delta === null
+      ? 'Starts on first use'
+      : delta <= 0
+        ? 'resetting now'
+        : `Resets in ${formatDuration(delta)}`;
 
   const colorCode = pct >= 100 ? RED : pct >= 80 ? YELLOW : GREEN;
   const coloredBar = bar(pct, BAR_MAX, opts.color);
@@ -124,13 +131,33 @@ export function renderProviderBlock(p: UsageData, opts: RenderOpts): string {
     }
     // Credits (mirrors app.js renderCredits, lines 107-112)
     if (p.credits) {
-      const parts: string[] = [];
-      if (p.credits.balanceUsd != null)
-        parts.push(`$${p.credits.balanceUsd.toFixed(2)}`);
-      if (p.credits.valueUsd != null)
-        parts.push(`Used: $${p.credits.valueUsd.toFixed(2)}`);
-      if (parts.length)
-        lines.push(`  ${p.credits.label}: ${parts.join(' · ')}`);
+      const hasCommandCodePools =
+        p.credits.monthlyCredits != null ||
+        p.credits.purchasedCredits != null ||
+        p.credits.freeCredits != null;
+      if (hasCommandCodePools) {
+        const planParts: string[] = [];
+        if (p.credits.monthlyCredits != null)
+          planParts.push(`Monthly: $${p.credits.monthlyCredits.toFixed(2)}`);
+        if (p.credits.freeCredits != null)
+          planParts.push(`Free: $${p.credits.freeCredits.toFixed(2)}`);
+        if (planParts.length)
+          lines.push(`  Plan credits: ${planParts.join(' · ')}`);
+        if (p.credits.purchasedCredits != null)
+          lines.push(
+            `  Extra/API credits: $${p.credits.purchasedCredits.toFixed(2)}`,
+          );
+      } else {
+        const parts: string[] = [];
+        if (p.credits.balanceUsd != null)
+          parts.push(`$${p.credits.balanceUsd.toFixed(2)}`);
+        if (p.credits.valueUsd != null)
+          parts.push(`Used: $${p.credits.valueUsd.toFixed(2)}`);
+        if (parts.length)
+          lines.push(`  ${p.credits.label}: ${parts.join(' · ')}`);
+      }
+      if (p.credits.spendUsd != null)
+        lines.push(`  Spend: $${p.credits.spendUsd.toFixed(2)}`);
     }
   } else {
     // Error / unconfigured state

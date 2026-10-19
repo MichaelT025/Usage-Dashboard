@@ -449,21 +449,40 @@ export function parseCommandCodeMonthly(
   subscriptions: unknown,
   usage: unknown,
 ): QuotaWindow | null {
-  if (!isRecord(credits) || !isRecord(credits['credits']) ||
-      !isRecord(subscriptions) || !isRecord(subscriptions['data']) ||
-      !isRecord(usage) || usage['periodBasis'] !== 'billing-period') return null;
+  if (
+    !isRecord(credits) ||
+    !isRecord(credits['credits']) ||
+    !isRecord(subscriptions) ||
+    !isRecord(subscriptions['data']) ||
+    !isRecord(usage) ||
+    usage['periodBasis'] !== 'billing-period'
+  )
+    return null;
   const remaining = toFiniteNumber(credits['credits']['monthlyCredits']);
   const used = toFiniteNumber(usage['totalMonthlyCredits']);
-  const end = parseCommandCodeTimestamp(subscriptions['data']['currentPeriodEnd']);
-  const start = parseCommandCodeTimestamp(subscriptions['data']['currentPeriodStart']);
-  if (remaining === null || used === null || remaining < 0 || used < 0 ||
-      remaining + used <= 0 || !end || !start || Date.parse(end) <= Date.parse(start)) return null;
+  const end = parseCommandCodeTimestamp(
+    subscriptions['data']['currentPeriodEnd'],
+  );
+  const start = parseCommandCodeTimestamp(
+    subscriptions['data']['currentPeriodStart'],
+  );
+  if (
+    remaining === null ||
+    used === null ||
+    remaining < 0 ||
+    used < 0 ||
+    remaining + used <= 0 ||
+    !end ||
+    !start ||
+    Date.parse(end) <= Date.parse(start)
+  )
+    return null;
   // Included credits consumed + remaining form the current period pool.
   // Purchased/free credits and model dollar cost are not monthly quota usage.
   return {
     label: 'Monthly',
     windowSeconds: (Date.parse(end) - Date.parse(start)) / 1000,
-    usedPercent: Math.min(100, round2(used / (used + remaining) * 100)),
+    usedPercent: Math.min(100, round2((used / (used + remaining)) * 100)),
     resetsAt: end,
   };
 }
@@ -494,10 +513,9 @@ function creditNumberFromRecord(
  * freeCredits, planId? }, windowLimits: {...} }` and usage summary
  * `{ totalCost, totalCount, totalTokens? }`.
  *
- * `CreditsInfo` cannot distinguish credit pools, so the adapter reports a
- * reasonable aggregate: `balanceUsd` = sum of the finite monthly /
- * purchased / free credit pools (undefined when no pool is numeric, never
- * a fabricated zero), and `valueUsd` = summary `totalCost` when present.
+ * `balanceUsd` remains a backward-compatible aggregate of finite pools, while
+ * the individual monthly / purchased / free values are preserved as well.
+ * `totalCost` is represented independently as spend and never added to a pool.
  * Legacy `balanceUsd`/`balance`/`remaining*` and `valueUsd`/`used*` fields
  * remain supported for tolerance. Returns undefined when nothing numeric
  * is present.
@@ -507,14 +525,12 @@ export function parseCommandCodeCredits(
   subscriptionsJson: unknown,
   usageJson?: unknown,
 ): UsageData['credits'] {
-  const POOL_KEYS = [
-    'monthlyCredits',
-    'monthly_credits',
-    'purchasedCredits',
-    'purchased_credits',
-    'freeCredits',
-    'free_credits',
-  ];
+  const POOLS = [
+    ['monthlyCredits', 'monthly_credits'],
+    ['purchasedCredits', 'purchased_credits'],
+    ['freeCredits', 'free_credits'],
+  ] as const;
+  const POOL_KEYS = POOLS.flatMap(([camel, snake]) => [camel, snake]);
   const poolSources: Array<Record<string, unknown>> = [];
   if (isRecord(creditsJson)) {
     const root = creditsJson;
@@ -527,19 +543,21 @@ export function parseCommandCodeCredits(
   }
 
   let pooledBalance: number | undefined;
+  const poolBalances: Partial<Record<(typeof POOLS)[number][0], number>> = {};
   for (const source of poolSources) {
     let sum: number | undefined;
-    let found = false;
-    for (const key of POOL_KEYS) {
+    for (const [camel, snake] of POOLS) {
+      // Presence, rather than successful parsing, decides precedence: an
+      // invalid camelCase value remains unknown and does not fall through.
+      const key = camel in source ? camel : snake;
+      if (!(key in source)) continue;
       const num = poolNumber(source[key]);
       if (num !== null) {
-        found = true;
+        poolBalances[camel] = num;
         sum = (sum ?? 0) + num;
       }
     }
-    if (found && sum !== undefined) {
-      pooledBalance = (pooledBalance ?? 0) + sum;
-    }
+    if (sum !== undefined) pooledBalance = sum;
   }
 
   const sources: Array<Record<string, unknown>> = [];
@@ -565,8 +583,6 @@ export function parseCommandCodeCredits(
   const valueKeys = [
     'valueUsd',
     'value_usd',
-    'totalCost',
-    'total_cost',
     'used',
     'usedCredits',
     'used_credits',
@@ -575,10 +591,18 @@ export function parseCommandCodeCredits(
   ];
   let balanceUsd: number | undefined = pooledBalance;
   let valueUsd: number | undefined;
+  let spendUsd: number | undefined;
   for (const source of sources) {
     balanceUsd ??= creditNumberFromRecord(source, balanceKeys) ?? undefined;
     valueUsd ??= creditNumberFromRecord(source, valueKeys) ?? undefined;
-    if (balanceUsd !== undefined && valueUsd !== undefined) break;
+    spendUsd ??=
+      creditNumberFromRecord(source, ['totalCost', 'total_cost']) ?? undefined;
+    if (
+      balanceUsd !== undefined &&
+      valueUsd !== undefined &&
+      spendUsd !== undefined
+    )
+      break;
   }
   if (isRecord(usageJson)) {
     const usageSources: Array<Record<string, unknown>> = [usageJson];
@@ -588,11 +612,19 @@ export function parseCommandCodeCredits(
     }
     for (const source of usageSources) {
       valueUsd ??= creditNumberFromRecord(source, valueKeys) ?? undefined;
-      if (valueUsd !== undefined) break;
+      spendUsd ??=
+        creditNumberFromRecord(source, ['totalCost', 'total_cost']) ??
+        undefined;
+      if (valueUsd !== undefined && spendUsd !== undefined) break;
     }
   }
-  if (balanceUsd === undefined && valueUsd === undefined) return undefined;
-  return { label: 'Balance', balanceUsd, valueUsd };
+  if (
+    balanceUsd === undefined &&
+    valueUsd === undefined &&
+    spendUsd === undefined
+  )
+    return undefined;
+  return { label: 'Balance', balanceUsd, valueUsd, spendUsd, ...poolBalances };
 }
 
 function poolNumber(value: unknown): number | null {
@@ -638,7 +670,10 @@ function isEntitlementPayload(payload: unknown): boolean {
   );
 }
 
-async function readJsonBody(res: Response, signal?: AbortSignal): Promise<unknown> {
+async function readJsonBody(
+  res: Response,
+  signal?: AbortSignal,
+): Promise<unknown> {
   if (!signal) return res.json();
   if (signal.aborted) throw signal.reason ?? new Error('aborted');
   return await Promise.race([
@@ -708,7 +743,10 @@ async function fetchEndpoint(
     void safeErrorMessage(err);
     // Malformed JSON is a schema failure; aborted/body transport reads
     // remain network failures.
-    return { kind: !signal?.aborted && err instanceof SyntaxError ? 'parse' : 'network' };
+    return {
+      kind:
+        !signal?.aborted && err instanceof SyntaxError ? 'parse' : 'network',
+    };
   }
 }
 
@@ -770,7 +808,9 @@ export class CommandCodeAdapter implements IProviderAdapter {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12_000);
     try {
-      if (typeof (timer as unknown as { unref?: unknown }).unref === 'function') {
+      if (
+        typeof (timer as unknown as { unref?: unknown }).unref === 'function'
+      ) {
         (timer as unknown as { unref: () => void }).unref();
       }
       const signal = controller.signal;
@@ -914,8 +954,16 @@ export class CommandCodeAdapter implements IProviderAdapter {
         parseCommandCodeWindows(subscriptionsData) ??
         [];
 
-      const monthly = parseCommandCodeMonthly(creditsData, subscriptionsData, usageData);
-      if (monthly && plan !== 'Provider' && !windows.some((window) => window.label === 'Monthly')) {
+      const monthly = parseCommandCodeMonthly(
+        creditsData,
+        subscriptionsData,
+        usageData,
+      );
+      if (
+        monthly &&
+        plan !== 'Provider' &&
+        !windows.some((window) => window.label === 'Monthly')
+      ) {
         windows.push(monthly);
       }
 
