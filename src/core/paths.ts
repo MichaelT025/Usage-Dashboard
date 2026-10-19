@@ -43,11 +43,25 @@ export function codexAuthPath(): string {
   return path.join(base, 'auth.json');
 }
 
-/** Path to the OpenCode CLI auth store. */
+/** OpenCode release data directory (shared by v1 JSON and v2 SQLite). */
+function opencodeDataDir(): string {
+  const base =
+    process.env['XDG_DATA_HOME'] || path.join(os.homedir(), '.local', 'share');
+  return path.join(base, 'opencode');
+}
+
+/** Path to the legacy OpenCode v1 CLI auth store. */
 export function opencodeAuthPath(): string {
   const override = process.env['OPENCODE_AUTH_PATH'];
   if (override) return path.resolve(override);
-  return path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+  return path.join(opencodeDataDir(), 'auth.json');
+}
+
+/** OpenCode v2 database; OPENCODE_DB is also understood by OpenCode itself. */
+export function opencodeDbPath(): string {
+  const override = process.env['OPENCODE_DB'];
+  if (override) return path.resolve(override);
+  return path.join(opencodeDataDir(), 'opencode.db');
 }
 
 /**

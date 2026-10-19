@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+import type { DatabaseSync as SQLiteDatabase } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getClaudeToken,
@@ -10,9 +12,14 @@ import {
 } from './credentials.js';
 
 const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
+const { DatabaseSync } = createRequire(import.meta.url)(
+  'node:sqlite',
+) as typeof import('node:sqlite');
 const originalCodexHome = process.env.CODEX_HOME;
 const originalOpenCodeApiKey = process.env.OPENCODE_API_KEY;
 const originalOpenCodeAuthPath = process.env.OPENCODE_AUTH_PATH;
+const originalOpenCodeDb = process.env.OPENCODE_DB;
+const originalXdgDataHome = process.env.XDG_DATA_HOME;
 const originalCommandCodeApiKey = process.env.COMMAND_CODE_API_KEY;
 const originalCommandCodeAuthPath = process.env.COMMAND_CODE_AUTH_PATH;
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -41,9 +48,12 @@ beforeEach(() => {
   );
   delete process.env.OPENCODE_API_KEY;
   delete process.env.OPENCODE_AUTH_PATH;
+  process.env.OPENCODE_DB = path.join(tempRoot, 'opencode.db');
+  delete process.env.XDG_DATA_HOME;
   delete process.env.COMMAND_CODE_API_KEY;
   delete process.env.COMMAND_CODE_AUTH_PATH;
   vi.restoreAllMocks();
+  vi.spyOn(os, 'homedir').mockReturnValue(tempRoot);
 });
 
 afterEach(() => {
@@ -60,6 +70,11 @@ afterEach(() => {
   if (originalOpenCodeAuthPath === undefined)
     delete process.env.OPENCODE_AUTH_PATH;
   else process.env.OPENCODE_AUTH_PATH = originalOpenCodeAuthPath;
+
+  if (originalOpenCodeDb === undefined) delete process.env.OPENCODE_DB;
+  else process.env.OPENCODE_DB = originalOpenCodeDb;
+  if (originalXdgDataHome === undefined) delete process.env.XDG_DATA_HOME;
+  else process.env.XDG_DATA_HOME = originalXdgDataHome;
 
   if (originalCommandCodeApiKey === undefined)
     delete process.env.COMMAND_CODE_API_KEY;
@@ -138,6 +153,168 @@ describe('getCodexToken', () => {
 });
 
 describe('getOpenCodeGoToken', () => {
+  function openDatabase(): SQLiteDatabase {
+    const db = new DatabaseSync(process.env.OPENCODE_DB!);
+    db.exec(`CREATE TABLE credential (
+      id TEXT PRIMARY KEY, integration_id TEXT, active INTEGER,
+      value TEXT NOT NULL, time_updated INTEGER NOT NULL
+    )`);
+    return db;
+  }
+
+  function insertKey(
+    db: SQLiteDatabase,
+    id: string,
+    integration: string,
+    active: number | null,
+    key: string,
+    updated = 1,
+  ): void {
+    db.prepare('INSERT INTO credential VALUES (?, ?, ?, ?, ?)').run(
+      id,
+      integration,
+      active,
+      JSON.stringify({ type: 'key', key }),
+      updated,
+    );
+  }
+
+  it('reads the active v2 Go account instead of stale legacy credentials', async () => {
+    process.env.XDG_DATA_HOME = tempRoot;
+    writeJson(path.join(tempRoot, 'opencode', 'auth.json'), {
+      'opencode-go': { type: 'api', key: 'STALE-LEGACY-KEY' },
+    });
+    const db = openDatabase();
+    try {
+      insertKey(db, 'inactive', 'opencode-go', null, 'OLD-KEY', 99);
+      insertKey(db, 'active', 'opencode-go', 1, 'ACTIVE-GO-KEY');
+      insertKey(db, 'shared', 'opencode', 1, 'SHARED-KEY', 100);
+      await expect(getOpenCodeGoToken()).resolves.toBe('ACTIVE-GO-KEY');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('re-reads v2 rotations and account switches including uncheckpointed WAL', async () => {
+    const db = openDatabase();
+    db.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;');
+    try {
+      insertKey(db, 'first', 'opencode-go', 1, 'FIRST-KEY');
+      await expect(getOpenCodeGoToken()).resolves.toBe('FIRST-KEY');
+      db.exec('UPDATE credential SET active = NULL');
+      insertKey(db, 'second', 'opencode-go', 1, 'SECOND-KEY');
+      await expect(getOpenCodeGoToken()).resolves.toBe('SECOND-KEY');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('falls back to the active v2 shared account, never an inactive Go key', async () => {
+    const db = openDatabase();
+    try {
+      insertKey(db, 'inactive', 'opencode-go', null, 'INACTIVE-KEY');
+      insertKey(db, 'shared', 'opencode', 1, 'ACTIVE-SHARED-KEY');
+      await expect(getOpenCodeGoToken()).resolves.toBe('ACTIVE-SHARED-KEY');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not resurrect legacy auth after v2 logout', async () => {
+    const db = openDatabase();
+    db.close();
+    process.env.XDG_DATA_HOME = tempRoot;
+    writeJson(path.join(tempRoot, 'opencode', 'auth.json'), {
+      'opencode-go': { type: 'api', key: 'STALE-LEGACY-KEY' },
+    });
+    await expect(getOpenCodeGoToken()).resolves.toBeNull();
+  });
+
+  it('supports default v2 discovery under XDG_DATA_HOME', async () => {
+    process.env.XDG_DATA_HOME = tempRoot;
+    fs.mkdirSync(path.join(tempRoot, 'opencode'));
+    process.env.OPENCODE_DB = path.join(tempRoot, 'opencode', 'opencode.db');
+    const db = openDatabase();
+    try {
+      insertKey(db, 'active', 'opencode-go', 1, 'XDG-KEY');
+      delete process.env.OPENCODE_DB;
+      await expect(getOpenCodeGoToken()).resolves.toBe('XDG-KEY');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('supports automatic v1 discovery when no v2 database exists', async () => {
+    process.env.XDG_DATA_HOME = tempRoot;
+    writeJson(path.join(tempRoot, 'opencode', 'auth.json'), {
+      'opencode-go': { type: 'api', key: 'LEGACY-KEY' },
+    });
+    await expect(getOpenCodeGoToken()).resolves.toBe('LEGACY-KEY');
+  });
+
+  it('rejects non-key or empty v2 credentials without trying inactive accounts', async () => {
+    const db = openDatabase();
+    try {
+      insertKey(db, 'active', 'opencode-go', 1, 'ORIGINAL');
+      insertKey(db, 'inactive', 'opencode-go', null, 'INACTIVE');
+      for (const value of [
+        { type: 'oauth', key: 'NOT-AN-API-KEY' },
+        { type: 'api', key: 'LEGACY-TYPE-NOT-V2' },
+        { type: 'key', key: ' ' },
+        { type: 'key', key: 123 },
+        null,
+        [],
+      ]) {
+        db.prepare('UPDATE credential SET value = ? WHERE id = ?').run(
+          JSON.stringify(value),
+          'active',
+        );
+        await expect(getOpenCodeGoToken()).resolves.toBeNull();
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it('fails closed on unreadable or malformed v2 databases without logging secrets', async () => {
+    const db = openDatabase();
+    db.prepare('INSERT INTO credential VALUES (?, ?, ?, ?, ?)').run(
+      'broken',
+      'opencode-go',
+      1,
+      '{"key":"DO-NOT-LEAK"',
+      1,
+    );
+    db.close();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    await expect(getOpenCodeGoToken()).resolves.toBeNull();
+    fs.writeFileSync(process.env.OPENCODE_DB!, 'not a database DO-NOT-LEAK');
+    await expect(getOpenCodeGoToken()).resolves.toBeNull();
+    expect(
+      JSON.stringify([...log.mock.calls, ...error.mock.calls]),
+    ).not.toContain('DO-NOT-LEAK');
+  });
+
+  it('prefers explicit environment keys and legacy auth-path overrides to v2', async () => {
+    const db = openDatabase();
+    try {
+      insertKey(db, 'active', 'opencode-go', 1, 'DATABASE-KEY');
+      process.env.OPENCODE_API_KEY = 'ENV-KEY';
+      await expect(getOpenCodeGoToken()).resolves.toBe('ENV-KEY');
+      delete process.env.OPENCODE_API_KEY;
+      process.env.OPENCODE_AUTH_PATH = path.join(tempRoot, 'explicit.json');
+      writeJson(process.env.OPENCODE_AUTH_PATH, {
+        'opencode-go': { type: 'api', key: 'EXPLICIT-LEGACY-KEY' },
+      });
+      await expect(getOpenCodeGoToken()).resolves.toBe('EXPLICIT-LEGACY-KEY');
+    } finally {
+      db.close();
+    }
+  });
+
   it('resolves the opencode-go API key from the CLI auth store', async () => {
     const authPath = path.join(tempRoot, 'opencode-auth.json');
     process.env.OPENCODE_AUTH_PATH = authPath;

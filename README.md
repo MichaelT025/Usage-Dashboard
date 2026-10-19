@@ -3,7 +3,7 @@
 > Local LLM subscription usage monitor — terminal by default, with an optional web dashboard.
 
 ![license](https://img.shields.io/badge/license-Apache%202.0-blue)
-![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
+![node](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen)
 
 ---
 
@@ -25,6 +25,8 @@ Zen and OpenRouter stubs are wired but not yet implemented.
 ---
 
 ## Quick start
+
+Requires Node.js 22.13 or newer (built-in SQLite support for OpenCode v2).
 
 ```bash
 # Install globally
@@ -125,12 +127,15 @@ Set `COMMAND_CODE_AUTH_PATH` only when the auth file is stored at a nonstandard 
 OpenCode Go usage is read from its official usage API. The API key is discovered automatically in this order:
 
 1. `OPENCODE_API_KEY`
-2. The `opencode-go` entry in `~/.local/share/opencode/auth.json`
-3. The `opencode` entry in the same auth file, because Zen and Go can share a workspace key
+2. An explicit `OPENCODE_AUTH_PATH` override (legacy JSON format)
+3. The active `opencode-go` account in OpenCode v2's `~/.local/share/opencode/opencode.db`, then the active `opencode` account if Go has no active account
+4. Only when no v2 database exists: the `opencode-go` entry in legacy `auth.json`, then the shared `opencode` entry
 
-To configure the key through OpenCode, run `/connect` in the OpenCode TUI, select **OpenCode Go**, and paste the key from the OpenCode console. Set `OPENCODE_AUTH_PATH` only when the auth file is stored at a nonstandard location.
+To configure the key through OpenCode, run `/connect` in the OpenCode TUI, select **OpenCode Go**, and paste the key from the OpenCode console. OpenCode v2 migrates credentials from `auth.json` once and writes subsequent updates only to SQLite; the old JSON file may contain an expired key even while OpenCode works. The dashboard reads SQLite **read-only** on every refresh, follows active-account changes, and never falls back to stale legacy keys when a v2 database exists (including after logout or a database read failure). See [OpenCode v2 storage documentation](https://opencode.ai/v2/docs/cli/providers#storage).
 
-If the API reports `api_key_expired`, create a **new API key** in the OpenCode Console and paste that new key through `/connect` → OpenCode Go. Signing in again does not renew an expired API key. If `OPENCODE_API_KEY` is set, replace or unset it too: it takes precedence over the auth store. The Docker deployment mounts the OpenCode credential directory read-only so atomic auth-file replacements remain visible without restarting the dashboard.
+For a nonstandard v2 database, set `OPENCODE_DB` to the path reported by `opencode debug paths db`. `XDG_DATA_HOME` is honored for the default release data directory. Set `OPENCODE_AUTH_PATH` only to explicitly select a legacy JSON auth file; it bypasses v2 discovery.
+
+If the API reports `api_key_expired`, create a **new API key** in the OpenCode Console and paste that new key through `/connect` → OpenCode Go. Signing in again does not renew an expired API key. If `OPENCODE_API_KEY` is set, replace or unset it too: it takes precedence over the auth store. The Docker deployment mounts the OpenCode data directory read-only, including SQLite's `-wal` and `-shm` sidecars, so committed credential changes and atomic legacy auth-file replacements remain visible without restarting the dashboard. Do not mount only `opencode.db` or use SQLite's `immutable` mode: either can hide live WAL updates.
 
 The endpoint reports Go subscription quotas only. It does not report ordinary Zen pay-as-you-go spending or the Zen credit balance.
 
@@ -177,10 +182,12 @@ OpenCode workspace IDs and browser cookies are no longer required. Existing `ope
 
 OpenCode credential discovery can be adjusted with these environment variables:
 
-| Variable             | Description                                           |
-| -------------------- | ----------------------------------------------------- |
-| `OPENCODE_API_KEY`   | OpenCode API key; takes precedence over the auth file |
-| `OPENCODE_AUTH_PATH` | Override path to the OpenCode CLI `auth.json` file    |
+| Variable             | Description                                             |
+| -------------------- | ------------------------------------------------------- |
+| `OPENCODE_API_KEY`   | OpenCode API key; takes precedence over all auth stores |
+| `OPENCODE_AUTH_PATH` | Explicit legacy `auth.json` file; bypasses v2 discovery |
+| `OPENCODE_DB`        | OpenCode v2 SQLite path (`opencode debug paths db`)     |
+| `XDG_DATA_HOME`      | Data root; defaults to `~/.local/share`                 |
 
 Command Code credential discovery can be adjusted with these environment variables:
 
@@ -248,7 +255,7 @@ public/
 
 ### Key design decisions
 
-- **Zero external runtime dependencies.** Only `fetch`, Node.js `http`, `fs`, and `path` are used at runtime. Dev dependencies are TypeScript, Vitest, and tsx.
+- **Zero external runtime dependencies.** Provider requests, HTTP serving, filesystem access, and read-only SQLite use Node.js built-ins. Dev dependencies are TypeScript, Vitest, and tsx.
 - **Adapter interface.** Every provider implements `IProviderAdapter` (`id`, `displayName`, `fetch()`). `fetch()` resolves with structured data or an error variant — it never throws.
 - **Poller concurrency.** If a poll is in flight, `refreshNow()` returns the same promise. After a 429, that adapter skips 2 cycles.
 - **Credential safety.** Secrets are stripped from all error messages, log output, and API responses via the `redactSecrets` utility. The server binds to `127.0.0.1` only.

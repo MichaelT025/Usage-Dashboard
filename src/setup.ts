@@ -78,11 +78,11 @@ export const ADD_PROVIDERS: readonly AddProviderInfo[] = [
     id: 'opencode-go',
     displayName: 'OpenCode Go',
     credentialSource:
-      'OPENCODE_API_KEY or ~/.local/share/opencode/auth.json (opencode-go entry, opencode entry as fallback)',
+      'OPENCODE_API_KEY, OpenCode v2 opencode.db (active account), or legacy auth.json (opencode-go/opencode)',
     loginSteps: [
       'Launch `opencode`.',
       'Run `/connect`, choose OpenCode Go, and paste the key from the OpenCode console.',
-      'If the key has expired, create a new API key in the OpenCode Console first. Signing in again does not renew it. Replace OPENCODE_API_KEY too if set; it overrides the auth file.',
+      'If the key has expired, create a new API key in the OpenCode Console first. Signing in again does not renew it. Replace OPENCODE_API_KEY too if set; it overrides the auth store.',
     ],
     optional: false,
   },
