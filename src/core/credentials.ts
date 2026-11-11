@@ -1,6 +1,9 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import {
   claudeCredentialsPath,
   codexAuthPath,
@@ -118,6 +121,98 @@ export async function getCodexToken(): Promise<{
   }
 }
 
+const ACTIVE_OPENCODE_CREDENTIAL_SQL = `
+  SELECT value FROM credential
+  WHERE integration_id IN ('opencode-go', 'opencode') AND active = 1
+  ORDER BY CASE integration_id WHEN 'opencode-go' THEN 0 ELSE 1 END,
+           time_updated DESC
+  LIMIT 1
+`;
+
+type SqliteModule = typeof import('node:sqlite');
+
+function loadSqlite(): SqliteModule {
+  // Lazy native loading keeps legacy-only use free of SQLite startup warnings.
+  // createRequire also supports test/build tools predating the node:sqlite builtin.
+  return createRequire(import.meta.url)('node:sqlite') as SqliteModule;
+}
+
+function queryActiveCredential(
+  location: string,
+  options: { readOnly: boolean },
+): Record<string, unknown> | undefined {
+  const { DatabaseSync } = loadSqlite();
+  const db = new DatabaseSync(location, options);
+  try {
+    db.exec('PRAGMA busy_timeout=1000');
+    return db.prepare(ACTIVE_OPENCODE_CREDENTIAL_SQL).get() as
+      Record<string, unknown> | undefined;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Read the active OpenCode v2 credential row.
+ *
+ * OpenCode's DB is in WAL mode. SQLite deletes the -wal/-shm files when the
+ * last OpenCode process exits, and a read-only connection cannot recreate the
+ * -shm — which is exactly the situation inside the Docker container, where the
+ * data dir is mounted :ro. A plain read-only open then fails with "unable to
+ * open database file" until OpenCode is started again, so fall back:
+ *   1. normal read-only open (sees live WAL content while OpenCode runs)
+ *   2. immutable open — exact when no WAL exists, needs no -shm
+ *   3. private snapshot of db(+wal/shm) in a temp dir, opened there
+ */
+function readActiveOpenCodeCredentialRow(
+  dbPath: string,
+): Record<string, unknown> | undefined {
+  let firstError: unknown;
+  try {
+    return queryActiveCredential(dbPath, { readOnly: true });
+  } catch (err) {
+    firstError = err;
+  }
+
+  const walPath = `${dbPath}-wal`;
+  let walHasData = false;
+  try {
+    walHasData = fs.statSync(walPath).size > 0;
+  } catch {
+    walHasData = false;
+  }
+
+  if (!walHasData) {
+    try {
+      return queryActiveCredential(
+        `${pathToFileURL(dbPath).href}?immutable=1`,
+        { readOnly: true },
+      );
+    } catch {
+      // fall through to the snapshot strategy
+    }
+  }
+
+  let tempDir: string | undefined;
+  try {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-usage-opencode-'));
+    const copyPath = path.join(tempDir, 'opencode.db');
+    fs.copyFileSync(dbPath, copyPath);
+    for (const suffix of ['-wal', '-shm']) {
+      try {
+        fs.copyFileSync(`${dbPath}${suffix}`, `${copyPath}${suffix}`);
+      } catch {
+        // sidecar absent: the main file alone is then complete
+      }
+    }
+    return queryActiveCredential(copyPath, { readOnly: false });
+  } catch {
+    throw firstError;
+  } finally {
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 /**
  * Resolve an API key for the OpenCode Go usage endpoint.
  * Priority: explicit API key, explicit legacy auth path, v2 active account, v1 JSON.
@@ -129,37 +224,16 @@ export async function getOpenCodeGoToken(): Promise<string | null> {
   try {
     const dbPath = opencodeDbPath();
     if (!process.env['OPENCODE_AUTH_PATH'] && fs.existsSync(dbPath)) {
-      // Lazy native loading keeps legacy-only use free of SQLite startup warnings.
-      // createRequire also supports test/build tools predating the node:sqlite builtin.
-      const { DatabaseSync } = createRequire(import.meta.url)(
-        'node:sqlite',
-      ) as typeof import('node:sqlite');
-      const db = new DatabaseSync(dbPath, { readOnly: true });
-      try {
-        db.exec('PRAGMA busy_timeout=1000');
-        const row = db
-          .prepare(
-            `
-          SELECT value FROM credential
-          WHERE integration_id IN ('opencode-go', 'opencode') AND active = 1
-          ORDER BY CASE integration_id WHEN 'opencode-go' THEN 0 ELSE 1 END,
-                   time_updated DESC
-          LIMIT 1
-        `,
-          )
-          .get();
-        if (!row || typeof row['value'] !== 'string') return null;
-        const value: unknown = JSON.parse(row['value']);
-        if (!value || typeof value !== 'object') return null;
-        const entry = value as Record<string, unknown>;
-        const key = entry['key'];
-        // V2 uses type "key", unlike the legacy JSON store's type "api".
-        return entry['type'] === 'key' && typeof key === 'string' && key.trim()
-          ? key.trim()
-          : null;
-      } finally {
-        db.close();
-      }
+      const row = readActiveOpenCodeCredentialRow(dbPath);
+      if (!row || typeof row['value'] !== 'string') return null;
+      const value: unknown = JSON.parse(row['value']);
+      if (!value || typeof value !== 'object') return null;
+      const entry = value as Record<string, unknown>;
+      const key = entry['key'];
+      // V2 uses type "key", unlike the legacy JSON store's type "api".
+      return entry['type'] === 'key' && typeof key === 'string' && key.trim()
+        ? key.trim()
+        : null;
     }
 
     const filePath = opencodeAuthPath();
