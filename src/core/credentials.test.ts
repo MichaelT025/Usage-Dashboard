@@ -276,6 +276,50 @@ describe('getOpenCodeGoToken', () => {
     }
   });
 
+  it('reads a WAL-mode v2 database from a read-only mount with no -wal/-shm', async () => {
+    const dataDir = path.join(tempRoot, 'ro-data');
+    fs.mkdirSync(dataDir);
+    process.env.OPENCODE_DB = path.join(dataDir, 'opencode.db');
+    const db = openDatabase();
+    try {
+      db.exec('PRAGMA journal_mode=WAL');
+      insertKey(db, 'active', 'opencode-go', 1, 'WAL-CLOSED-KEY');
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    } finally {
+      // Last connection closing removes -wal/-shm, as when OpenCode exits.
+      db.close();
+    }
+    expect(fs.existsSync(`${process.env.OPENCODE_DB}-shm`)).toBe(false);
+    // Read-only directory: a plain read-only open cannot recreate the -shm.
+    fs.chmodSync(dataDir, 0o555);
+    try {
+      await expect(getOpenCodeGoToken()).resolves.toBe('WAL-CLOSED-KEY');
+    } finally {
+      fs.chmodSync(dataDir, 0o755);
+    }
+  });
+
+  it('uses a snapshot when a read-only mount still has pending WAL data', async () => {
+    const dataDir = path.join(tempRoot, 'ro-wal');
+    fs.mkdirSync(dataDir);
+    process.env.OPENCODE_DB = path.join(dataDir, 'opencode.db');
+    const db = openDatabase();
+    try {
+      db.exec('PRAGMA journal_mode=WAL');
+      db.exec('PRAGMA wal_autocheckpoint=0');
+      insertKey(db, 'active', 'opencode-go', 1, 'OLD-IN-DB');
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+      insertKey(db, 'newer', 'opencode-go', 1, 'NEW-IN-WAL', 2);
+      expect(
+        fs.statSync(`${process.env.OPENCODE_DB}-wal`).size,
+      ).toBeGreaterThan(0);
+      // Snapshot copies db + wal + shm, so un-checkpointed rows are visible.
+      await expect(getOpenCodeGoToken()).resolves.toBe('NEW-IN-WAL');
+    } finally {
+      db.close();
+    }
+  });
+
   it('fails closed on unreadable or malformed v2 databases without logging secrets', async () => {
     const db = openDatabase();
     db.prepare('INSERT INTO credential VALUES (?, ?, ?, ?, ?)').run(
